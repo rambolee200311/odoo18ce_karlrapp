@@ -1,22 +1,23 @@
-<!-- CC-GIN-002 v0.2 Draft. Project CC template sync: BLOCKED (project template source absent); prior user-approved process exception may be followed. Not Frozen; no coding authorization. -->
+<!-- CC-GIN-002 v1.0 Frozen. Human Review: APPROVED. Project CC template sync: BLOCKED (project template source absent); frozen under the user's approved process exception. -->
 
-# Coding Contract 草案：CC-GIN-002
+# Coding Contract：CC-GIN-002
 
 ## 文档状态
 
 | 项目 | 内容 |
 |---|---|
 | CC ID | CC-GIN-002 |
-| 草案版本 | v0.2 Draft（评审稿） |
-| 当前状态 | Draft；未冻结，不授权编码 |
+| 版本 | v1.0 Frozen |
+| 当前状态 | Frozen；Human Review APPROVED |
 | 本 CC 范围 | API01 入库单、API03 出库单、API05 盘点任务、API07 产品档案 |
 | 上游基线 | SRS v1.0 Frozen；TDD v0.3 Frozen with Open Items |
 | 计划参考 | Implementation Plan v1.0 阶段 1；本次不修改计划 |
-| 项目架构认知 | [PROJECT_COGNITION.md](../context/cognition/PROJECT_COGNITION.md) v1.0 |
+| 项目架构认知 | [PROJECT_COGNITION.md](../context/cognition/PROJECT_COGNITION.md) v1.1 |
 | 关联文件 | [SRS](../requirement/SRS_ginlong_apis.md)、[TDD](../ginlong_apis/TDD.md)、[Implementation Plan](IMPLEMENTATION_PLAN_ginlong_apis.md) |
 | 前序 CC | [CC-GIN-001 v1.0 Closed](CC-GIN-001.md)；[FR-GIN-001 v1.0](FR-GIN-001.md) |
-| 模板同步 | BLOCKED：项目模板来源缺失。按用户指示可沿用既有批准的流程例外；检查结果仍为 BLOCKED，不代表同步通过或 CC 冻结 |
-| 授权 | 仅授权修订本评审稿；不授权编码、安装/升级模块、修改数据库业务数据或冻结 CC |
+| Human Review | APPROVED（项目用户明确批准）；2026-11-17 |
+| 模板同步 | BLOCKED：项目模板来源缺失。依据项目用户批准的流程例外冻结；检查结果仍为 BLOCKED，不代表模板同步通过 |
+| 授权 | 已授权修订并冻结本 CC v1.0，且授权按本 CC 实施编码；范围外工作仍未授权 |
 
 ## 1. 目标与三系统职责
 
@@ -24,7 +25,7 @@
 
 订单 Order 记录业务指令，stock.picking 记录实际执行结果。两者不建立强制关联，可按业务标识及产品、数量、批次、托盘等数据核对；一张 Order 可对应多次实际执行。
 
-**收到 API01/03 订单不代表仓库已执行，不得因此创建实际执行结果、stock.picking、库存移动或库存数量变化。** 本 CC 仅处理订单接收与字段映射，复用现有 WMS 订单模型和业务服务；不重新实现仓库作业或库存逻辑。
+**收到 API01/03 订单不代表仓库已执行，不得因此确认实际执行完成或实际库存变化。** 是否按现有 WMS 逻辑创建待执行 stock.picking 或 stock.move，完全遵循既有业务流程；本 CC 不自行创建执行完成状态或过账库存。本 CC 仅处理订单接收与字段映射，不重新实现仓库作业或库存逻辑。
 
 ## 2. 范围
 
@@ -32,10 +33,12 @@
 
 | ID | 变更项 | 范围及追溯 |
 |---|---|---|
-| CC-CHANGE-001 | API01 入库单 | 按 SRS FR-GIN-001 接收已批准字段，映射到现有入库 Order 与其明细，调用现有 WMS 订单服务；不据此确认收货、创建 picking 或改变库存。追溯：TDD §3.1、§3.2.1、§6.1；SRS A-001/A-002、A-004。 |
-| CC-CHANGE-002 | API03 出库单 | 按 A-003「Solis → Odoo」开发假设接收并映射到现有出库 Order 与明细，调用现有 WMS 订单服务。方向和外部协议仍待 Ginlong 正式确认；不得将假设表述为已确认契约。追溯：SRS FR-GIN-003/A-003；TDD §3.1、§3.2.1、§5、§6.1、T-API03-001。 |
-| CC-CHANGE-003 | API05 盘点任务 | 按 SRS FR-GIN-005 将已批准字段映射到独立盘点任务及任务明细；不得将盘点数量作为现存量，不执行库存调整或过账。删除、开始盘点后的变更等未确认规则不由本 CC 补造。追溯：TDD §3.1、§3.2.2、§6.1、T-COUNT-001。 |
-| CC-CHANGE-004 | API07 产品档案 | 按 SRS FR-GIN-007 复用现有 product.product，必要时仅按 TDD 扩展产品字段；模板共享属性按字段语义放置。服从现有 WMS 产品主数据服务，不建立 Ginlong 产品档案或默认映射表。追溯：TDD §3.1、§3.2.1、§3.2.3、§6.1、T-WMS-001。 |
+| CC-CHANGE-001 | API01 入库单 | 实现 SRS FR-GIN-001 的创建/删除核心行为；处理 owner、action、inboundOrderNo、warehouse、businessType、remark、details（productCode、name/productName、specificationModel、quantity）及 snList（productSN、quantity、palletCode、productCode、name/productName、specificationModel）字段，按现有 WMS 服务映射完整数据。订单接收不得确认仓库实际执行或实际库存变化；待执行 picking/move 是否生成完全遵循现有 WMS 逻辑。追溯：SRS FR-GIN-001、TDD §3.1、§3.2.1、§5.1、§6.1、T-WMS-001。 |
+| CC-CHANGE-002 | API03 出库单 | 实现 SRS FR-GIN-003 的创建/删除核心行为；在 A-003「Solis → Odoo」开发假设下处理表头 owner、action、outboundOrderNo、warehouse、businessType、remark、customer、address、consignee、contact、contactEmail、shippingMethod，以及 details 中 productCode、productName、specificationModel、quantity、order_no、unit、net_wt_machine、net_wt_total、pack_qty、pallet_qty、pallet_len、pallet_wid、pallet_hgt、unit_vol、pack_unit、pack_wt、pallet_total_wt、total_vol、carton_wt_total、gross_wt_total、standard、pack_mode。逐字段映射至现有 Odoo WMS 订单/产品/包装对象或为保留未能由现有对象表达的已批准数据作最小继承扩展；不静默丢弃。订单接收不得确认实际执行或库存变化，待执行 picking/move 是否生成遵循现有 WMS 逻辑。方向及正式协议仍待 Ginlong 确认。追溯：SRS FR-GIN-003/A-003、TDD §3.1、§3.2.1、§5.1、§6.1、T-API03-001、T-WMS-001。 |
+| CC-CHANGE-003 | API05 盘点任务 | 实现 SRS FR-GIN-005 的创建/删除核心行为；处理 owner、action、countOrderNo、warehouse、remark、details 中产品编码/名称/规格/数量及 snList 中目标 SN/数量/托盘/产品编码/名称/规格字段，映射到独立盘点任务和明细。不得将目标数量作为库存，不读写 stock.quant、不执行库存调整或过账。追溯：SRS FR-GIN-005、TDD §3.1、§3.2.2、§5.1、§6.1、T-COUNT-001。 |
+| CC-CHANGE-004 | API07 产品档案 | 实现 SRS FR-GIN-007 的产品新增/修改核心行为；覆盖 owner、productCode、name、specificationModel、unit、power、nationalStandard、certificationModel、productForm、weight、length、width、height，复用 product.product、必要时按 TDD 扩展，并调用现有 WMS 产品主数据能力。不建立 Ginlong 产品档案或默认映射表，不新增 owner-product 归属规则。追溯：SRS FR-GIN-007、TDD §3.1、§3.2.1、§3.2.3、§5.1、§6.1、T-WMS-001。 |
+
+**字段完整性与阻塞规则：** 本地模拟及验收必须覆盖上述 SRS 明确的核心字段和行为。Ginlong 未确认的 endpoint、HTTP 细节、action 枚举、字段类型/必填性、外部删除限制、单位转换或重复规则，不得成为省略已明确字段/核心功能的理由。测试可使用明确标注为本地模拟的输入契约。若实现某接口的完整核心字段映射或创建/删除/新增/修改行为确实被缺失信息阻塞，该接口验收状态必须为 BLOCKED；不得用部分字段映射判定该接口通过。
 
 ### 2.2 明确排除
 
@@ -44,7 +47,7 @@
 - Karl Rapp Gateway、VPN/FTP、XML 与 JSON 转换及真实三系统端到端联调。
 - 订单货主与项目货主解绑，以及托盘生命周期完整管理和验收；两者仍是项目必须完成的需求，另安排独立 CC 或后续适当阶段。
 - 新建通用映射、订单、库存、产品、托盘或日志模型；增加 owner-product 归属校验、强制 Order 与 stock.picking 关联、未经批准的业务规则或审批门禁。
-- 任何由接收 Ginlong 指令直接触发的收货、发货、库存移动或库存调整。
+- 任何由接收 Ginlong 指令直接确认完成收货/发货、确认实际库存变化或执行库存调整。现有 WMS 因订单处理生成待执行 picking/move 不在此禁止项内。
 
 货主解绑与托盘生命周期不构成本 CC 整体冻结的前置条件。凡场景直接依赖货主脱离项目绑定的，仅将该场景排除或延后；API01/03 可按当前已支持的有效数据完成其余字段映射与自动化验收。凡字段处理直接依赖完整托盘生命周期语义的，仅延后该受影响场景；不得因此把生命周期验收塞入本 CC，也不得宣称已完成生命周期要求。
 
@@ -74,14 +77,14 @@ Implementation Plan v1.0 保持不变，本次不修订其阶段或追溯表；�
 
 ## 4. 自动化与组件集成验收
 
-以下均为待执行测试契约，不代表测试已运行或通过。测试使用 Odoo 标准测试运行器和 ORM；运行结果记录至对应 ATR/IHR。真实 Ginlong 联调、人工仓库操作及完整业务流程由最终集成 CC 验收。
+测试使用 Odoo 标准测试运行器和 ORM；运行结果记录至对应 ATR/IHR。真实 Ginlong 联调、人工仓库操作及完整业务流程由最终集成 CC 验收。每个接口测试须同时覆盖本 CC 列出的全部 SRS 核心字段及核心行为；缺少任何一项时该接口不得标记 Passed，确实无法完成则标记 BLOCKED 并记录阻塞原因。
 
 | ID | 范围 | 验收条件 |
 |---|---|---|
-| CC-TEST-001 | API01 | 模拟有效已批准字段请求，断言字段映射至现有入库 Order/明细并调用既有 WMS 订单处理；请求接收本身不产生实际收货、stock.picking 或库存变化。 |
-| CC-TEST-002 | API03 | 按 A-003 模拟有效请求，断言字段映射至现有出库 Order/明细并调用既有 WMS 订单处理；不将 A-003 标记为外部确认，也不因接收订单产生 picking 或库存变化。 |
-| CC-TEST-003 | API05 | 模拟已批准盘点字段，断言任务及明细映射到独立盘点对象，不把目标数量写成现存量、不创建库存移动、不调用库存调整/过账；不额外建立对所有只读库存查询的通用否定断言。 |
-| CC-TEST-004 | API07 | 模拟已批准产品字段，断言通过现有产品对象及 WMS 主数据能力处理；不创建 Ginlong 产品/映射模型，不增加 owner-product 归属校验。 |
+| CC-TEST-001 | API01 | 使用覆盖全部 CC-CHANGE-001 字段的本地模拟请求，分别验证 SRS 核心创建和删除行为及现有 WMS 服务调用；字段映射不缺项。接收指令不得将 picking/move 置为实际完成或确认库存变化；允许现有 WMS 服务按其既有逻辑创建待执行 picking/move。 |
+| CC-TEST-002 | API03 | 在 A-003 本地模拟下使用覆盖全部 CC-CHANGE-002 字段的请求，分别验证核心创建和删除行为及现有 WMS 服务调用；字段映射不缺项。不得将 picking/move 置为实际完成或确认库存变化；允许现有 WMS 服务按其既有逻辑创建待执行 picking/move。测试不得把 A-003 表述为 Ginlong 已确认方向。 |
+| CC-TEST-003 | API05 | 使用覆盖全部 CC-CHANGE-003 字段的请求，验证核心创建/删除行为以及独立盘点任务和明细映射；不得把目标数量写成现存量，不读写 stock.quant，不调用库存调整/过账。 |
+| CC-TEST-004 | API07 | 使用覆盖全部 CC-CHANGE-004 字段的新增和修改模拟请求，验证完整字段经现有产品对象及 WMS 主数据能力处理；不创建 Ginlong 产品/映射模型，不增加 owner-product 归属校验。 |
 | CC-TEST-005 | 共用入口 | 对四个接口覆盖现有认证/权限及 API 日志复用路径；校验未授权请求不改变业务对象，日志不泄露 Secret、Token、Authorization 等凭据。 |
 | CC-TEST-006 | 安装与回归 | 使用现有 Odoo 配置和数据库运行模块相关自动化/组件集成测试；必要的现有 WMS 回归只覆盖被调用服务及其既有行为，不将未执行的人工流程记为通过。 |
 
@@ -91,25 +94,19 @@ Implementation Plan v1.0 保持不变，本次不修订其阶段或追溯表；�
 
 1. 未确认的外部规则不得由实现者或测试者补造。若某字段的实际映射必须依赖未批准的单位换算、业务键、删除/重复处理或订单执行语义，暂停该字段/场景并记录依赖，不扩大为整个 CC 的阻塞。
 2. API03 保持可替换的本地假设入口；收到 Ginlong 正式方向后，先评估其对 SRS/TDD/本 CC 的影响，再实施相应变更。
-3. 若代码实施发现冻结 TDD 与本 CC 的解释不一致，或要求突破现有 WMS 服务边界，暂停受影响范围并升级处理；本草案不授权偏离 TDD。
+3. 若代码实施发现冻结 TDD 与本 CC 的解释不一致，或要求突破现有 WMS 服务边界，暂停受影响范围并升级处理；本 CC 不授权偏离 TDD。
 4. 货主解绑、托盘生命周期、API09、出站按钮和 Gateway 均不得以“顺手完善”方式并入本 CC。
 
-## 6. 冻结与完成条件（供后续评审）
+## 6. 冻结与完成条件
 
-本文件当前为 Draft。后续冻结评审至少确认：
-
-- 本 CC 范围仍限于 API01/03/05/07，且引用的 SRS/TDD 依据有效。
-- 外部未决项及 A-003 假设仍清楚标注；API05 不承担库存记账。
-- 货主解绑与托盘生命周期仍有明确后续安排，但不作为本 CC 整体冻结门槛；直接受影响的场景已单独限制。
-- 模板同步状态继续如实记为 BLOCKED，并按用户批准的流程例外处理，不伪记 Passed。
-- 冻结后另行获得实施授权；本 Draft 不构成编码许可。
+Human Review 已批准本 CC v0.2，经本次限定修订后冻结为 v1.0。模板同步保持 BLOCKED，并按项目用户批准的流程例外记录；不把模板缺失伪记为同步通过。编码授权仅限本 CC v1.0 明确的范围和验收条件。
 
 实际开发完成后，依 CC 冻结版本执行自动化及组件集成验收，并按项目流程完成 IHR、ATR 与 FR。完整人工业务验证和三系统 E2E 留待最终集成 CC。
 
 ## 7. 当前项目状态
 
 - CC-GIN-001 v1.0：Closed，Human Review APPROVED；其范围不包含本 CC 四个接口。
-- CC-GIN-002 v0.2：Draft；仅本次文档修订，不冻结、不授权编码。
+- CC-GIN-002 v1.0：Frozen；Human Review APPROVED；已授权按本 CC 编码实施。
 - HTTP E2E、Ginlong 真实联调、完整 WMS 人工流程及模板来源同步：沿用既有 NOT RUN/BLOCKED 记录，不改写为 Passed。
 - 货主解绑与托盘生命周期：作为项目必须完成的后续需求保留，分别安排独立 CC 或后续适当阶段。
 
@@ -119,3 +116,4 @@ Implementation Plan v1.0 保持不变，本次不修订其阶段或追溯表；�
 |---|---|---|---|
 | v0.1 | 2026-11-17 | Draft | 首版阶段 1 候选契约；曾把货主解绑与托盘生命周期上游更新列作 CC 门禁，并纳入相应验收项。 |
 | v0.2 | 2026-11-17 | Draft | 按评审意见将范围收窄为 API01/03/05/07；把货主解绑与托盘生命周期移出本 CC 整体门禁及验收；明确三系统职责、订单接收不等于仓库执行、A-003 外部待确认、盘点库存边界和自动化/组件集成验收。模板同步仍 BLOCKED；未冻结、未授权编码。 |
+| v1.0 | 2026-11-17 | Frozen | Human Review APPROVED。按批准意见明确 API01/03 接收订单与实际执行/库存变化的区别，待执行 picking/move 遵循现有 WMS；CC-TEST-001/002 同步调整。补齐四接口的 SRS 核心字段及行为覆盖，并规定核心功能无法完成时标记 BLOCKED，不以部分字段映射判为通过。模板同步仍 BLOCKED，按用户批准的流程例外冻结；授权本 CC 范围内编码实施。 |
