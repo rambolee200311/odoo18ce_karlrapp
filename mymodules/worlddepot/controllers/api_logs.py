@@ -7,6 +7,46 @@ from odoo import models, fields, api, _
 
 _logger = logging.getLogger(__name__)
 
+_AUTH_ENDPOINTS = {
+    '/world_depot/api/auth/token',
+    '/world_depot/api/auth/getToken',
+}
+_REDACTED = '[REDACTED]'
+
+
+def _request_data_for_log(request_path, request_data):
+    """Mask api_secret only on the existing token-issuing endpoints."""
+    if request_path not in _AUTH_ENDPOINTS or not request_data:
+        return request_data
+    try:
+        payload = json.loads(request_data)
+    except (TypeError, ValueError):
+        # The authentication endpoint only accepts JSON credentials. If it is
+        # malformed, do not persist or print the unparseable raw body.
+        return '[authentication request omitted]'
+    if not isinstance(payload, dict):
+        return '[authentication request omitted]'
+    if 'api_secret' in payload:
+        payload['api_secret'] = _REDACTED
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _response_data_for_log(request_path, response):
+    """Mask access_token in the two known token endpoint response shapes."""
+    if request_path not in _AUTH_ENDPOINTS or not isinstance(response, dict):
+        return response
+    # Copy through JSON so the returned response object remains unchanged.
+    try:
+        payload = json.loads(json.dumps(response, ensure_ascii=False))
+    except (TypeError, ValueError):
+        return {'data': '[authentication response omitted]'}
+    if 'access_token' in payload:
+        payload['access_token'] = _REDACTED
+    data = payload.get('data')
+    if isinstance(data, dict) and 'access_token' in data:
+        data['access_token'] = _REDACTED
+    return payload
+
 
 class APILog(models.Model):
     _name = 'world.depot.api.log'
@@ -105,8 +145,10 @@ def api_logger(func):
         request_source = request.httprequest.remote_addr
         request_time = fields.Datetime.now()
         request_path = request.httprequest.path
+        request_data = _request_data_for_log(request_path, request_data)
         response = None
         response_str = ""
+        response_for_log = None
         exception_details = None
         status = "success"
         log_success = True
@@ -117,20 +159,21 @@ def api_logger(func):
         # Execute the endpoint function
         try:
             response = func(*args, **kwargs)
-            response_str = json.dumps(response, ensure_ascii=False) if response else ''
+            response_for_log = _response_data_for_log(request_path, response)
+            response_str = json.dumps(response_for_log, ensure_ascii=False) if response_for_log else ''
 
-            if isinstance(response, dict):
-                if "success" in response:
-                    log_success = bool(response.get("success"))
+            if isinstance(response_for_log, dict):
+                if "success" in response_for_log:
+                    log_success = bool(response_for_log.get("success"))
                     status = "success" if log_success else "error"
-                elif "error" in response:
+                elif "error" in response_for_log:
                     log_success = False
                     status = "error"
 
-                log_code = response.get("code") or ("200" if log_success else "ERROR")
-                log_msg = response.get("msg") or response.get("error") or ""
-                if "data" in response:
-                    log_data = json.dumps(response.get("data"), ensure_ascii=False)
+                log_code = response_for_log.get("code") or ("200" if log_success else "ERROR")
+                log_msg = response_for_log.get("msg") or response_for_log.get("error") or ""
+                if "data" in response_for_log:
+                    log_data = json.dumps(response_for_log.get("data"), ensure_ascii=False)
 
         except Exception as e:
             # Rollback main transaction before handling error

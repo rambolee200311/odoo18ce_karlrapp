@@ -36,7 +36,7 @@ def validate_token(func):
         ], limit=1)
 
         if not token_rec:
-            _logger.warning("Invalid API token: %s", token)
+            _logger.warning("Invalid API token")
             return http.Response(
                 json.dumps({'error': 'Invalid token'}),
                 status=401,
@@ -45,7 +45,7 @@ def validate_token(func):
 
         if token_rec.expires < fields.Datetime.now():
             token_rec.unlink()
-            _logger.info("Expired token deleted: %s", token)
+            _logger.info("Expired API token deleted")
             return http.Response(
                 json.dumps({'error': 'Token expired'}),
                 status=401,

@@ -19,6 +19,7 @@ README.md
 !docs/guide/README.md
 !docs/guide/user/README.md
 requirements.txt
+!mymodules/worlddepot/requirements.txt
 SECURITY.md
 setup.cfg
 setup.py

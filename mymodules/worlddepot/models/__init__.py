@@ -16,7 +16,6 @@ from . import my_product
 #from . import my_user
 #from . import my_partner
 from . import my_picking_type
-from . import my_package_barcode
 from . import my_api_user
 from . import my_location
 #from . import my_excel_template
