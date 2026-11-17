@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_ginlong_stocktake_task_user,ginlong.stocktake.task user,model_ginlong_stocktake_task,stock.group_stock_user,1,1,1,1
+access_ginlong_stocktake_task_manager,ginlong.stocktake.task manager,model_ginlong_stocktake_task,stock.group_stock_manager,1,1,1,1
+access_ginlong_stocktake_task_line_user,ginlong.stocktake.task.line user,model_ginlong_stocktake_task_line,stock.group_stock_user,1,1,1,1
+access_ginlong_stocktake_task_line_manager,ginlong.stocktake.task.line manager,model_ginlong_stocktake_task_line,stock.group_stock_manager,1,1,1,1

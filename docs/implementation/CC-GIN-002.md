@@ -1,4 +1,4 @@
-<!-- CC-GIN-002 v1.0 Frozen. Human Review: APPROVED. Project CC template sync: BLOCKED (project template source absent); frozen under the user's approved process exception. -->
+<!-- CC-GIN-002 v1.0：Frozen then Closed. Human Review: APPROVED. Project CC template sync: BLOCKED (project template source absent); handled under the user's approved process exception. -->
 
 # Coding Contract：CC-GIN-002
 
@@ -7,8 +7,8 @@
 | 项目 | 内容 |
 |---|---|
 | CC ID | CC-GIN-002 |
-| 版本 | v1.0 Frozen |
-| 当前状态 | Frozen；Human Review APPROVED |
+| 版本 | v1.0（Frozen；现已 Closed） |
+| 当前状态 | Closed；Human Review APPROVED |
 | 本 CC 范围 | API01 入库单、API03 出库单、API05 盘点任务、API07 产品档案 |
 | 上游基线 | SRS v1.0 Frozen；TDD v0.3 Frozen with Open Items |
 | 计划参考 | Implementation Plan v1.0 阶段 1；本次不修改计划 |
@@ -18,6 +18,7 @@
 | Human Review | APPROVED（项目用户明确批准）；2026-11-17 |
 | 模板同步 | BLOCKED：项目模板来源缺失。依据项目用户批准的流程例外冻结；检查结果仍为 BLOCKED，不代表模板同步通过 |
 | 授权 | 已授权修订并冻结本 CC v1.0，且授权按本 CC 实施编码；范围外工作仍未授权 |
+| 关闭状态 | Closed；Closure SATISFIED；Human Review APPROVED（项目用户明确批准）；2026-11-17 |
 
 ## 1. 目标与三系统职责
 
@@ -99,14 +100,14 @@ Implementation Plan v1.0 保持不变，本次不修订其阶段或追溯表；�
 
 ## 6. 冻结与完成条件
 
-Human Review 已批准本 CC v0.2，经本次限定修订后冻结为 v1.0。模板同步保持 BLOCKED，并按项目用户批准的流程例外记录；不把模板缺失伪记为同步通过。编码授权仅限本 CC v1.0 明确的范围和验收条件。
+Human Review 已批准本 CC v0.2，经限定修订后冻结为 v1.0。随后依据 FR-GIN-002 v1.0（Closure SATISFIED；Human Review APPROVED）关闭本 CC。模板同步保持 BLOCKED，并按项目用户批准的流程例外记录；不把模板缺失伪记为同步通过。编码授权仅限本 CC v1.0 明确的范围和验收条件。
 
 实际开发完成后，依 CC 冻结版本执行自动化及组件集成验收，并按项目流程完成 IHR、ATR 与 FR。完整人工业务验证和三系统 E2E 留待最终集成 CC。
 
 ## 7. 当前项目状态
 
 - CC-GIN-001 v1.0：Closed，Human Review APPROVED；其范围不包含本 CC 四个接口。
-- CC-GIN-002 v1.0：Frozen；Human Review APPROVED；已授权按本 CC 编码实施。
+- CC-GIN-002 v1.0：Closed；FR-GIN-002 v1.0 Closure SATISFIED；Human Review APPROVED。
 - HTTP E2E、Ginlong 真实联调、完整 WMS 人工流程及模板来源同步：沿用既有 NOT RUN/BLOCKED 记录，不改写为 Passed。
 - 货主解绑与托盘生命周期：作为项目必须完成的后续需求保留，分别安排独立 CC 或后续适当阶段。
 
@@ -117,3 +118,4 @@ Human Review 已批准本 CC v0.2，经本次限定修订后冻结为 v1.0。模
 | v0.1 | 2026-11-17 | Draft | 首版阶段 1 候选契约；曾把货主解绑与托盘生命周期上游更新列作 CC 门禁，并纳入相应验收项。 |
 | v0.2 | 2026-11-17 | Draft | 按评审意见将范围收窄为 API01/03/05/07；把货主解绑与托盘生命周期移出本 CC 整体门禁及验收；明确三系统职责、订单接收不等于仓库执行、A-003 外部待确认、盘点库存边界和自动化/组件集成验收。模板同步仍 BLOCKED；未冻结、未授权编码。 |
 | v1.0 | 2026-11-17 | Frozen | Human Review APPROVED。按批准意见明确 API01/03 接收订单与实际执行/库存变化的区别，待执行 picking/move 遵循现有 WMS；CC-TEST-001/002 同步调整。补齐四接口的 SRS 核心字段及行为覆盖，并规定核心功能无法完成时标记 BLOCKED，不以部分字段映射判为通过。模板同步仍 BLOCKED，按用户批准的流程例外冻结；授权本 CC 范围内编码实施。 |
+| 关闭记录（v1.0） | 2026-11-17 | Closed | 依据 FR-GIN-002 v1.0：Closure SATISFIED、Human Review APPROVED。ATR 最终有效基线为 ATR-RUN-009。模板同步、Ginlong 外部协议及 API03 方向继续保留 BLOCKED/待确认状态。 |
