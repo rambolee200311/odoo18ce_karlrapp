@@ -134,7 +134,7 @@
 
 - CC-GIN-001 v1.0 Closed：addon 基础、复用边界及共享 API 日志安全修复；关闭依据见 FR-GIN-001 v1.0。
 
-**当前执行状态（2026-11-17）：** CC-GIN-001 v1.0 已关闭；CC-GIN-002 v1.0 已依据 FR-GIN-002 v1.0（Closure SATISFIED；Human Review APPROVED）关闭。ATR-GIN-002 的最终有效测试基线为 ATR-RUN-009；未重跑测试。阶段 1 中 CC-GIN-002 明确范围内的 API01/03/05/07 本地自动化及 ORM/组件验收完成，但项目必需的订单货主解绑和托盘生命周期管理仍未完成，须安排后续独立 CC/适当阶段，不能据此标记为已完成。现进入 CC-GIN-003 准备阶段：五个手动回传接口的 CC-GIN-003 v0.1 Draft 已起草，尚未 Human Review、冻结或授权编码。Ginlong 外部协议及 API03 正式方向仍待确认；HTTP E2E、完整 WMS 流程、模板同步均保留原 NOT RUN/BLOCKED 状态。Plan v1.0 的规划基线保持不变，本段及后续表格仅记录执行状态。
+**当前执行状态（2026-11-17）：** CC-GIN-001 v1.0 已关闭；CC-GIN-002 v1.0 已依据 FR-GIN-002 v1.0（Closure SATISFIED；Human Review APPROVED）关闭，ATR-GIN-002 最终有效基线为 ATR-RUN-009，未重跑。CC-GIN-003 v1.0 已由 Human Review APPROVED 并冻结，授权编码及自动化/集成测试；范围包括 API01/03/05/07 入站幂等与限流、UPDATE/DELETE 及五个人工回传接口。实施记录见 [IHR-GIN-003 v0.2](IHR-GIN-003.md)，测试记录见 [ATR-GIN-003 v0.2](ATR-GIN-003.md)。最新基线 15 项 Odoo 自动化通过；真实单进程 HTTP 验证观察到 200/429、`Retry-After` 及次秒幂等重放。五个人工回传、真实多 Worker 100/s 和提交后响应丢失仍未通过/未运行；workers=4 子进程因 `zope.interface` distribution 解析错误未能启动，详见 ATR。Ginlong 外部协议、API03 正式方向、API07 DELETE 契约仍待确认。完整 WMS 流程及模板同步保持 BLOCKED/NOT RUN；模板同步按已批准例外仍为 BLOCKED，不伪记通过。本段仅记录执行状态，不改变 Plan v1.0 规划基线。
 
 **CC-GIN-001 关闭及下一阶段门禁（2026-11-17）：** 李建强 Human Review `APPROVED`；FR-GIN-001 v1.0 正式关闭；CC-GIN-001 v1.0 状态为 Closed。已允许进入 CC-GIN-002 草拟和评审准备。当前 SRS v1.0 未纳入订单货主与项目解绑及托盘生命周期要求，TDD v0.3 也未完成这些设计；故 CC-GIN-002 Draft 明确保留这两项，但受影响条款在上游 SRS/TDD/Plan 更新批准并重新基线化、CC 冻结之前不得编码实施。其他不依赖该变更的内容也须以 CC-GIN-002 最终冻结范围为准。HTTP E2E、WMS 流程写入验证和模板同步继续保留原未执行/BLOCKED 状态。
 
@@ -175,6 +175,7 @@
 **CC 对应关系**
 
 - [CC-GIN-002 v1.0 Closed](CC-GIN-002.md)：API01/03/05/07 本地范围完成；ATR-RUN-009 最终有效基线。货主解绑及托盘生命周期仍为项目必需后续工作，未纳入此 CC 完成范围。
+- [CC-GIN-003 v1.0 Frozen with Open Items](CC-GIN-003.md)：继续覆盖入站 API 的幂等/限流及 UPDATE/DELETE 行为；验收按 CC-GIN-003 §6.2 单独记录。此 CC 不改变其他 WMS 模型全局唯一规则。
 
 ### 阶段 2：单据上的人工回传按钮
 
@@ -208,7 +209,7 @@
 
 **CC 对应关系**
 
-- [CC-GIN-003 v0.1 Draft](CC-GIN-003.md)：进入准备阶段；Human Review、冻结及编码授权待后续明确。
+- [CC-GIN-003 v1.0 Frozen with Open Items](CC-GIN-003.md)：Human Review APPROVED；已授权实施及自动化/集成测试。覆盖五个人工回传接口；其验收与入站幂等/限流结果分开记录。Ginlong 协议 Open Items 继续保留。
 
 ### 阶段 3：API09 只读库存查询
 
@@ -325,7 +326,7 @@ flowchart TD
 | 里程碑 | 包含阶段 / 交付物 | 退出条件与证据 | 目标 / 状态 |
 |---|---|---|---|
 | M1——实施准备就绪 | 计划批准、阶段 0 | 计划获批并建立基线；开发环境可用且共享日志安全通过验证 | 2026-11-17；安装 / 升级、7 项 Odoo 测试及真实 Odoo Secret/认证验证通过；WMS 只读 ORM 冒烟通过，未运行单据/库存写入流程；FR-GIN-001 v1.0 Human Review APPROVED，CC-GIN-001 Closed |
-| M2——Ginlong 本地流程 | 阶段 1、2 | 四个入站接口的已批准 CC 范围通过本地自动化/ORM 验收；后续五按钮 CC 与所需 UI / 集成验收完成 | 2026-11-17；CC-GIN-002 v1.0 Closed（ATR-RUN-009）；CC-GIN-003 v0.1 准备中；M2 未完成 |
+| M2——Ginlong 本地流程 | 阶段 1、2 | 四个入站接口及五个手动按钮各自完成 CC 自动化/ORM 验收；API07 100 次/秒真实多 Worker 限流验证满足 CC 标准 | 2026-11-17；CC-GIN-002 v1.0 Closed（ATR-RUN-009）；CC-GIN-003 v1.0 Frozen/实施中（最新 15 项 Odoo 自动化通过，真实单进程 429/重放通过）；回传、多 Worker 和事务响应丢失仍未完成，M2 未完成 |
 | M3——库存查询 | 阶段 3 | API09 契约获批，且只读结果符合确认样例 | 日期待定；受外部语义阻塞 |
 | M4——Ginlong 联调 | 阶段 4、5 | 本地回归证据及逐接口 Ginlong 测试证据齐备 | 日期待定；需要外部资料 |
 | M5——三系统闭环 | 本计划与独立的 `karlrapp_gateway` 计划 | 基于现有 WMS 单据，完成 Ginlong ↔ Odoo 与 Odoo ↔ KR 验收证据核对 | 日期待定；不属于本计划实施范围 |
@@ -341,7 +342,8 @@ flowchart TD
 | SRS FR-GIN-005 / API05 | 阶段 1 | 独立盘点任务 / 明细可保存，不产生库存移动 | ORM 及明确的无库存写入证据 | CC-GIN-002 / CC-TEST-003 | SATISFIED；ATR-RUN-009 |
 | SRS FR-GIN-007 / API07 | 阶段 1 | 按批准字段复用 / 扩展现有 `product.product` | 对照 WMS 产品主数据行为的 ORM 证据 | CC-GIN-002 / CC-TEST-004 | 本地范围 SATISFIED；外部产品契约仍待确认；ATR-RUN-009 |
 | 项目用户决定：Ginlong 可有多个货主 | 后续阶段 | 订单货主按接口数据独立指定，不只由项目 Owner 决定；货主档案复用既有伙伴能力 | 多货主场景与现有订单回归；具体实现先纳入适用上游基线 | 后续独立 CC / 测试编号待分配 | 项目必需；未完成，不属于 CC-GIN-002 关闭范围 |
-| SRS FR-GIN-002/004/006/008/010 | 阶段 2 | 五个按钮位于正确的入库单、出库单或盘点单上，点击后人工发送一次 | 模拟 HTTP 与 UI 证据 | CC-GIN-003 / 验收编号待 Draft 评审 | CC-GIN-003 v0.1 Draft；准备中，未冻结/未授权实施 |
+| SRS FR-GIN-002/004/006/008/010 | 阶段 2 | 五个按钮位于正确的入库单、出库单或盘点单上，点击后人工发送一次 | 模拟 HTTP 与 UI 证据 | CC-GIN-003 v1.0 / CC-TEST-001–007 | 已冻结并授权；未实施，CC-TEST-001–007 BLOCKED，见 ATR-GIN-003 |
+| 项目用户决定：入站幂等与限流、UPDATE/DELETE | 阶段 1/2 | API01/03/05/07 按接口键和指纹幂等；各 API 独立限流；订单 DELETE 仅状态取消且重复删除成功；UPDATE 复用现有模型逻辑 | ORM/自动化及真实多 Worker HTTP；API07 限流 100 次/秒并记录冲突/重试/错误 | CC-GIN-003 v1.0 / CC-TEST-008–023 | 最新 15 项 Odoo 自动化通过，部分测试 PASS；多 Worker/API07 100/s 与响应丢失未通过/未运行，见 ATR-GIN-003；Open Items 依 CC 保留 |
 | SRS FR-GIN-010 / API10 | 阶段 2 | API10 Payload 来源于盘点单采集结果，不进行库存过账 | 模拟 HTTP + 库存隔离证据 | CC-GIN-003 / TEST-GIN-004 | 计划中；批次语义待确认 |
 | SRS FR-GIN-009 / API09 | 阶段 3 | 只读查询符合已确认过滤条件和数量口径 | 经批准的样例及开发环境数据库查询结果对照 | CC-GIN-004 / TEST-GIN-006 | 受锦浪语义阻塞 |
 | SRS NFR-GIN-SEC-001/002 | 阶段 0/4 | 复用现有认证 / 权限，凭据不泄露 | 认证 / ACL 场景及日志检查 | CC-GIN-001/005 / TEST-GIN-009/010 | 真实 API Secret ORM 哈希/验证及既有认证 controller 通过；日志保护和 7 项 Odoo 测试通过。ACL 授权矩阵不属于本 CC 验收范围，后续业务阶段核对，见 ATR-GIN-001 |
@@ -402,14 +404,14 @@ flowchart TD
 
 | 交付物 | 计划阶段 | 验收证据 | 最终位置 / 状态 |
 |---|---|---|---|
-| 使用现有 WMS 模型的 `ginlong_apis` addon | 阶段 0–3 | CC/FR、Odoo 安装 / 升级及回归证据 | `mymodules/ginlong_apis/`；CC-GIN-001 v1.0 Closed；CC-GIN-002 v1.0 Closed（FR-GIN-002 v1.0；ATR-RUN-009）；CC-GIN-003 v0.1 Draft 准备中 |
+| 使用现有 WMS 模型的 `ginlong_apis` addon | 阶段 0–3 | CC/FR、Odoo 安装 / 升级及回归证据 | `mymodules/ginlong_apis/`；CC-GIN-001 v1.0 Closed；CC-GIN-002 v1.0 Closed（FR-GIN-002 v1.0；ATR-RUN-009）；CC-GIN-003 v1.0 Frozen with Open Items，实施中 |
 | Ginlong 流量使用的安全共享 API 日志 | 阶段 0 | 凭据不可见的验证证据及现有日志回归证据 | `mymodules/worlddepot/`；阶段 0 安全修复和 ATR 完成，CC-GIN-001 v1.0 Closed（FR-GIN-001 v1.0） |
 | 五个单据上的人工回传按钮 | 阶段 2 | 模拟 HTTP、UI 和 API 日志证据 | `mymodules/ginlong_apis/`；尚未开始 |
 | 本地模拟报告 | 阶段 4 | 逐接口执行结果及准确状态 | `docs/context/report/`；计划中 |
 | Ginlong 真实联调证据 | 阶段 5 | 契约、端点测试记录、脱敏请求 / 响应证据 | `docs/context/report/`；受外部资料阻塞 |
 | 三系统端到端闭环证据 | 单独联合活动 | Ginlong 与 `karlrapp_gateway` 已批准的验收证据，并基于 Odoo 记录核对 | 项目收尾资料；不属于本计划范围 |
 
-项目结束时，应按实际 CC、FR 和 PVR 证据逐项核对本计划各阶段及交付物。本计划 v1.0 规划基线保持冻结；执行状态以对应 IHR/ATR/FR 为准。CC-GIN-002 只关闭其明确的四接口本地验收范围，货主解绑、托盘生命周期、五个手动回传及真实外部联调仍属于未完成工作。
+项目结束时，应按实际 CC、FR 和 PVR 证据逐项核对本计划各阶段及交付物。本计划 v1.0 规划基线保持冻结；执行状态以对应 IHR/ATR/FR 为准。CC-GIN-002 只关闭其明确的四接口本地验收范围；CC-GIN-003 v1.0 已冻结并进入实施，实际完成情况以其分区 IHR/ATR/FR 为准。货主解绑、托盘生命周期及真实外部联调仍属于未完成工作。
 
 ## 13. 待决事项与后续跟踪
 
@@ -417,8 +419,8 @@ flowchart TD
 |---|---|---|---|---|
 | OPEN-GIN-API-DOCS | 提供有版本的端点、方法、认证、请求 / 响应、错误及测试环境资料 | 阶段 5 及各受影响的生产接口 | 锦浪 / 项目负责人 | 待提供 |
 | OPEN-GIN-API03 | 确认 API03 方向 | 阶段 5 / API03 生产启用 | 锦浪 / 项目负责人 | 待确认；A-003 仍为开发假设 |
-| OPEN-GIN-API05-10 | 确认 API05 删除 / action 及 API10 整单 / 部分批次语义 | 阶段 1/2/5 的相关部分 | 锦浪 / 项目负责人 | 待确认 |
-| OPEN-GIN-API07 | 确认产品字段及创建 / 更新行为 | API07 生产验收 | 锦浪 / WMS 负责人 | 待确认 |
+| OPEN-GIN-API10 | 确认 API10 整单 / 部分批次语义及外部 action | 阶段 2/5 的相关部分 | 锦浪 / 项目负责人 | 待确认；API05 本地 DELETE 依 CC-GIN-003 改为状态取消，不物理删除 |
+| OPEN-GIN-API07 | 确认产品字段、创建 / 更新行为及是否存在产品 DELETE 契约 | API07 生产验收 | 锦浪 / WMS 负责人 | 待确认；本 CC 不擅自物理删除或归档产品 |
 | OPEN-GIN-MULTI-OWNER | 评估并记录多货主在订单模型中的字段来源，确保 Owner 不再只由项目唯一货主决定；更新适用 SRS/TDD 基线 | 后续独立 CC / 适当阶段（CC-GIN-002 已关闭且不含此项） | 项目负责人 / WMS 负责人 | 用户已确认可修改现有订单模型；必需需求，尚未完成/基线化 |
 | OPEN-GIN-PALLET-LIFECYCLE | 明确托盘从入库、库内移动 / 拆装到出库的事件追踪及验收；验证标准 Package / Stock Move 记录完整性并更新适用 SRS/TDD 基线 | 后续独立 CC / 适当阶段（CC-GIN-002 已关闭且不含此项） | 项目负责人 / WMS 负责人 | 用户要求必须记录；必需需求，尚未完成/基线化 |
 | OPEN-GIN-API09 | 确认货主 / 仓库 / 产品过滤、库位范围、数量口径和分页 | 阶段 3 | 锦浪 / WMS 负责人 | 待确认 |
@@ -449,12 +451,12 @@ flowchart TD
 |---|---|---|---|---|
 | 阶段 0：基础与日志安全 | CC-GIN-001 v1.0 Closed | 安装/升级与 Odoo runner 7 项通过；真实 ORM Secret/认证、Token validator、logger 安全及 WMS 只读模型查询通过；未执行 HTTP 网络或 WMS 写入流程 | NFR-GIN-SEC-001/002、NFR-GIN-AUD-001 | ATR-RUN-005；FR-GIN-001 v1.0 Human Review APPROVED；CC 已关闭 |
 | 阶段 1：入站订单 / 产品 / 盘点任务 | CC-GIN-002 v1.0 Closed | ATR-RUN-009；六项自动化通过；仅关闭 CC 明确的 API01/03/05/07 本地范围 | FR-GIN-001/003/005/007 | 已关闭；货主解耦及托盘生命周期仍为后续必需需求，不得标记完成 |
-| 阶段 2：单据人工回传按钮 | [CC-GIN-003 v0.1 Draft](CC-GIN-003.md) | 当前为准备稿；评审、冻结、实施及验收均待后续授权 | FR-GIN-002/004/006/008/010 | 准备中；Ginlong 外部协议/响应和受货主、托盘需求影响的场景需列清楚 |
+| 阶段 1/2：入站保护/订单操作及单据人工回传 | [CC-GIN-003 v1.0 Frozen with Open Items](CC-GIN-003.md) | Human Review APPROVED；实施与自动化/集成测试已授权；回传与入站分区记录结果 | FR-GIN-002/004/006/008/010 及用户确认的幂等/限流/订单操作规则 | 实施中；IHR-GIN-003 v0.2、ATR-GIN-003 v0.2；15 项自动化通过，五个人工回传及 API07 100/s 多 Worker 验收未完成；外部 Open Items 保留 |
 | 阶段 3：API09 查询 | CC-GIN-004 | 阶段 1 与上游更新后分配 | FR-GIN-009 | 待补；外部语义门禁 |
 | 阶段 4：本地集成 / 回归 | CC-GIN-005 | 前序阶段完成后分配 | 适用的 FR 和 NFR | 待补；托盘生命周期门禁 |
 | 阶段 5：Ginlong 真实联调 | CC-GIN-006 | 前序阶段及外部合同满足后分配 | 适用且已确认的 FR 和外部契约 | 待补；外部端点门禁 |
 
-CC-GIN-001 v1.0、CC-GIN-002 v1.0 均已 Closed；后者以 ATR-RUN-009 为最终有效测试基线。CC-GIN-003 v0.1 仅为准备稿，未冻结、未授权编码。项目货主解绑和托盘生命周期仍为必须完成的后续需求。Ginlong 外部协议、API03 方向及 CC 模板同步继续保持待确认/BLOCKED，不标记为通过。
+CC-GIN-001 v1.0、CC-GIN-002 v1.0 均已 Closed；后者以 ATR-RUN-009 为最终有效测试基线。CC-GIN-003 v1.0 已冻结并获授权实施/测试，当前部分代码、组件测试和单进程 HTTP 证据见 IHR-GIN-003 v0.2 / ATR-GIN-003 v0.2；整项未完成。项目货主解绑和托盘生命周期仍为必须完成的后续需求。Ginlong 外部协议、API03 方向、API07 DELETE 契约及 CC 模板同步继续保持待确认/BLOCKED，不标记为通过。
 
 ## 15. 修订记录
 
@@ -463,3 +465,5 @@ CC-GIN-001 v1.0、CC-GIN-002 v1.0 均已 Closed；后者以 ATR-RUN-009 为最�
 | v0.1 | 2026-11-16 | Draft | TDD v0.3 冻结后首次起草计划；明确 Ginlong 范围内的实施阶段并保持三个模块的职责边界 | 全部；基线为 SRS v1.0、TV v0.2、TDD v0.3 |
 | v1.0 | 2026-11-17 | Frozen | 按项目用户明确指令冻结；记录多货主及托盘生命周期门禁；随后将 CC-GIN-001 v1.0 回填为阶段 0 实际 CC 并记录进入实施；模板源同步保留 BLOCKED，不伪记为通过 | 阶段 0 实施中；阶段 1/2/4 受影响工作须先完成上游更新；基线为 SRS v1.0、TV v0.2、TDD v0.3 |
 | 执行状态更新 | 2026-11-17 | 执行记录 | 回填 CC-GIN-002 v1.0 Closed、FR-GIN-002 v1.0 Closure SATISFIED / Human Review APPROVED、ATR-RUN-009 最终有效；CC-GIN-003 v0.1 进入准备阶段。未修改已冻结规划基线 | 阶段 1 CC-GIN-002 范围完成；阶段 2 准备中；货主解绑、托盘生命周期、外部联调和模板同步未完成 |
+| 执行状态更新 | 2026-11-17 | 执行记录 | 依据 Human Review APPROVED 将 CC-GIN-003 更新为 v1.0 Frozen with Open Items，并记录编码/自动化测试授权；扩展对应阶段与验收追溯，分别记录入站幂等/限流和五个手动回传结果；模板同步仍 BLOCKED | 阶段 1/2 实施中；API07 多 Worker 100 次/秒验证未运行；Ginlong 外部协议及其他 CC Open Items 保留 |
+| 执行状态更新 | 2026-11-17 | 执行记录 | 回填 CC-GIN-003 实施证据：ATR-RUN-008 最新代码上 15 项 Odoo 测试通过；记录单进程 HTTP 429/Retry-After/幂等重放、logger 并发异常修复和保留的失败记录；真实多 Worker 启动失败、API07 100/s、回传接口和响应丢失测试仍未通过/未运行。项目模板同步仍 BLOCKED | M2 未完成；IHR-GIN-003 v0.2 / ATR-GIN-003 v0.2；不关闭 CC，不改变 Plan v1.0 规划基线 |

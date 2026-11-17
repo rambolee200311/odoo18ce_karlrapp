@@ -3,7 +3,8 @@ import json
 from functools import wraps
 from datetime import datetime
 from odoo.http import request
-from odoo import models, fields, api, _
+from odoo import http, models, fields, api, _
+from odoo.service.model import PG_CONCURRENCY_EXCEPTIONS_TO_RETRY
 
 _logger = logging.getLogger(__name__)
 
@@ -88,6 +89,11 @@ def api_logger(func):
             status = 'success'
             response_str = json.dumps(response) if response else ''
         except Exception as e:
+            if isinstance(e, PG_CONCURRENCY_EXCEPTIONS_TO_RETRY):
+                # Preserve Odoo's built-in HTTP transaction retry. Rolling back
+                # or translating here would hide a serialization/deadlock from
+                # the dispatcher before it can rerun the request.
+                raise
             # Rollback main transaction before handling error
             request.env.cr.rollback()
             status = 'error'
@@ -159,8 +165,19 @@ def api_logger(func):
         # Execute the endpoint function
         try:
             response = func(*args, **kwargs)
-            response_for_log = _response_data_for_log(request_path, response)
-            response_str = json.dumps(response_for_log, ensure_ascii=False) if response_for_log else ''
+            if isinstance(response, http.Response):
+                response_status = response.status_code
+                response_str = response.get_data(as_text=True) or ""
+                response_for_log = None
+                if response_status >= 400:
+                    log_success = False
+                    status = "error"
+                    log_code = str(response_status)
+                    log_msg = "HTTP %s" % response_status
+                    log_data = response_str
+            else:
+                response_for_log = _response_data_for_log(request_path, response)
+                response_str = json.dumps(response_for_log, ensure_ascii=False) if response_for_log else ''
 
             if isinstance(response_for_log, dict):
                 if "success" in response_for_log:
@@ -176,6 +193,11 @@ def api_logger(func):
                     log_data = json.dumps(response_for_log.get("data"), ensure_ascii=False)
 
         except Exception as e:
+            if isinstance(e, PG_CONCURRENCY_EXCEPTIONS_TO_RETRY):
+                # Preserve Odoo's built-in HTTP transaction retry. Rolling back
+                # or translating here would hide a serialization/deadlock from
+                # the dispatcher before it can rerun the request.
+                raise
             # Rollback main transaction before handling error
             request.env.cr.rollback()
             status = 'error'

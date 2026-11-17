@@ -57,17 +57,24 @@ def api01(env, api_user, payload):
 
     if action == "DELETE":
         order = _find_one_by_reference(order_model, project, payload["inboundOrderNo"], "Inbound order")
-        order.unlink()  # Existing WMS state restrictions remain authoritative.
+        if order.state != "cancel":
+            order.write({"state": "cancel"})
         return {"success": True, "data": {"action": action, "inboundOrderNo": payload["inboundOrderNo"]}}
-    if action != "CREATE":
-        raise ValidationError("API01 local simulation action must be CREATE or DELETE")
+    if action not in ("CREATE", "UPDATE"):
+        raise ValidationError("API01 local simulation action must be CREATE, UPDATE, or DELETE")
 
+    order = False
+    if action == "UPDATE":
+        order = _find_one_by_reference(order_model, project, payload["inboundOrderNo"], "Inbound order")
     details = payload.get("details")
-    if not isinstance(details, list) or not details:
-        raise ValidationError("API01 details must contain at least one product row")
+    if action == "CREATE" or "details" in payload:
+        if not isinstance(details, list) or not details:
+            raise ValidationError("API01 details must contain at least one product row")
+    else:
+        details = None
     lines = []
     product_line_by_code = {}
-    for index, detail in enumerate(details):
+    for index, detail in enumerate(details or []):
         if not isinstance(detail, dict):
             raise ValidationError("API01 details[%s] must be an object" % index)
         _required(detail, ["productCode", "specificationModel", "quantity"], "API01 details[%s]" % index)
@@ -91,11 +98,11 @@ def api01(env, api_user, payload):
         }))
         product_line_by_code.setdefault(detail["productCode"], []).append(index)
 
-    sn_list = payload.get("snList", [])
-    if not isinstance(sn_list, list):
+    sn_list = payload.get("snList", [] if action == "CREATE" else None)
+    if sn_list is not None and not isinstance(sn_list, list):
         raise ValidationError("API01 snList must be a list when provided")
-    serial_values = [[] for _detail in details]
-    for index, serial in enumerate(sn_list):
+    serial_values = [[] for _detail in (details or [])]
+    for index, serial in enumerate(sn_list or []):
         if not isinstance(serial, dict):
             raise ValidationError("API01 snList[%s] must be an object" % index)
         _required(serial, ["productSN", "quantity", "productCode"], "API01 snList[%s]" % index)
@@ -118,7 +125,7 @@ def api01(env, api_user, payload):
     for index, line in enumerate(lines):
         line[2]["product_serial_number_ids"] = serial_values[index]
 
-    order = order_model.sudo().create({
+    order_values = {
         "project": project.id,
         "warehouse": project.warehouse.id if project.warehouse else False,
         "pick_type": project.inbound_pick_type.id if project.inbound_pick_type else False,
@@ -127,9 +134,16 @@ def api01(env, api_user, payload):
         "ginlong_owner_code": payload["owner"],
         "ginlong_warehouse_code": payload["warehouse"],
         "ginlong_business_type": payload["businessType"],
-        "ginlong_sn_list_json": json.dumps(sn_list, ensure_ascii=False),
-        "inbound_order_product_ids": lines,
-    })
+    }
+    if details is not None:
+        order_values["inbound_order_product_ids"] = [(5, 0, 0)] + lines
+    if sn_list is not None:
+        order_values["ginlong_sn_list_json"] = json.dumps(sn_list, ensure_ascii=False)
+    if action == "CREATE":
+        order_values["inbound_order_product_ids"] = lines
+        order = order_model.sudo().create(order_values)
+    else:
+        order.write(order_values)
     return {"success": True, "data": {"id": order.id, "billno": order.billno, "state": order.state}}
 
 
@@ -142,25 +156,34 @@ def api03(env, api_user, payload):
 
     if action == "DELETE":
         order = _find_one_by_reference(order_model, project, payload["outboundOrderNo"], "Outbound order")
-        order.unlink()
+        if order.state != "cancel":
+            order.write({"state": "cancel"})
         return {"success": True, "data": {"action": action, "outboundOrderNo": payload["outboundOrderNo"]}}
-    if action != "CREATE":
-        raise ValidationError("API03 local simulation action must be CREATE or DELETE")
+    if action not in ("CREATE", "UPDATE"):
+        raise ValidationError("API03 local simulation action must be CREATE, UPDATE, or DELETE")
 
+    order = False
+    if action == "UPDATE":
+        order = _find_one_by_reference(order_model, project, payload["outboundOrderNo"], "Outbound order")
     details = payload.get("details")
-    if not isinstance(details, list) or not details:
-        raise ValidationError("API03 details must contain at least one product row")
+    if action == "CREATE" or "details" in payload:
+        if not isinstance(details, list) or not details:
+            raise ValidationError("API03 details must contain at least one product row")
+    else:
+        details = None
     customer_name = payload.get("customer")
-    if not customer_name:
+    if action == "CREATE" and not customer_name:
         raise ValidationError("The existing WMS outbound order requires a customer/recipient")
-    partner_model = env["res.partner"].sudo().with_context(active_test=False)
-    customers = partner_model.search([
-        ("name", "=", customer_name),
-        "|", ("source_project_id", "=", project.id), ("source_project_id", "=", False),
-    ], limit=2)
-    if len(customers) != 1:
-        reason = "not found" if not customers else "ambiguous"
-        raise ValidationError("Customer %s is %s in the existing WMS recipient data" % (customer_name, reason))
+    customers = False
+    if customer_name:
+        partner_model = env["res.partner"].sudo().with_context(active_test=False)
+        customers = partner_model.search([
+            ("name", "=", customer_name),
+            "|", ("source_project_id", "=", project.id), ("source_project_id", "=", False),
+        ], limit=2)
+        if len(customers) != 1:
+            reason = "not found" if not customers else "ambiguous"
+            raise ValidationError("Customer %s is %s in the existing WMS recipient data" % (customer_name, reason))
 
     order_lines = []
     line_required = [
@@ -174,7 +197,7 @@ def api03(env, api_user, payload):
         "pallet_wid", "pallet_hgt", "unit_vol", "pack_wt", "pallet_total_wt", "total_vol",
         "carton_wt_total", "gross_wt_total",
     ]
-    for index, detail in enumerate(details):
+    for index, detail in enumerate(details or []):
         if not isinstance(detail, dict):
             raise ValidationError("API03 details[%s] must be an object" % index)
         _required(detail, line_required, "API03 details[%s]" % index)
@@ -197,7 +220,6 @@ def api03(env, api_user, payload):
         "project": project.id,
         "warehouse": project.warehouse.id if project.warehouse else False,
         "pick_type": project.outbound_pick_type.id if project.outbound_pick_type else False,
-        "unload_company": customers.id,
         "reference": payload["outboundOrderNo"],
         "remark": payload.get("remark") or False,
         "delivery_street": payload.get("address") or False,
@@ -211,9 +233,16 @@ def api03(env, api_user, payload):
         "ginlong_contact": payload.get("contact") or False,
         "ginlong_contact_email": payload.get("contactEmail") or False,
         "ginlong_shipping_method": payload.get("shippingMethod") or False,
-        "outbound_order_product_ids": order_lines,
     }
-    order = order_model.sudo().create(order_values)
+    if customers:
+        order_values["unload_company"] = customers.id
+    if details is not None:
+        order_values["outbound_order_product_ids"] = [(5, 0, 0)] + order_lines
+    if action == "CREATE":
+        order_values["outbound_order_product_ids"] = order_lines
+        order = order_model.sudo().create(order_values)
+    else:
+        order.write(order_values)
     return {"success": True, "data": {"id": order.id, "billno": order.billno, "state": order.state}}
 
 
@@ -232,19 +261,35 @@ def api05(env, api_user, payload):
         if len(tasks) != 1:
             reason = "not found" if not tasks else "ambiguous"
             raise ValidationError("Stocktake task %s is %s in this WMS project" % (payload["countOrderNo"], reason))
-        tasks.unlink()
+        if tasks.state != "cancel":
+            tasks.write({"state": "cancel"})
         return {"success": True, "data": {"action": action, "countOrderNo": payload["countOrderNo"]}}
-    if action != "CREATE":
-        raise ValidationError("API05 local simulation action must be CREATE or DELETE")
+    if action not in ("CREATE", "UPDATE"):
+        raise ValidationError("API05 local simulation action must be CREATE, UPDATE, or DELETE")
 
     details = payload.get("details")
     sn_list = payload.get("snList")
-    if not isinstance(details, list) or not details:
-        raise ValidationError("API05 details must contain at least one product row")
-    if not isinstance(sn_list, list):
+    if action == "CREATE" and not isinstance(sn_list, list):
+        raise ValidationError("API05 snList must be a list")
+    task = False
+    if action == "UPDATE":
+        tasks = task_model.search([
+            ("project_id", "=", project.id),
+            ("count_order_no", "=", payload["countOrderNo"]),
+        ], limit=2)
+        if len(tasks) != 1:
+            reason = "not found" if not tasks else "ambiguous"
+            raise ValidationError("Stocktake task %s is %s in this WMS project" % (payload["countOrderNo"], reason))
+        task = tasks
+    if action == "CREATE" or "details" in payload:
+        if not isinstance(details, list) or not details:
+            raise ValidationError("API05 details must contain at least one product row")
+    else:
+        details = None
+    if sn_list is not None and not isinstance(sn_list, list):
         raise ValidationError("API05 snList must be a list")
     line_values = []
-    for index, detail in enumerate(details):
+    for index, detail in enumerate(details or []):
         if not isinstance(detail, dict):
             raise ValidationError("API05 details[%s] must be an object" % index)
         _required(detail, ["productCode", "productName", "specificationModel", "quantity"], "API05 details[%s]" % index)
@@ -254,21 +299,28 @@ def api05(env, api_user, payload):
             "specification_model": detail["specificationModel"],
             "quantity": _number(detail["quantity"], "API05 details[%s].quantity" % index),
         }))
-    for index, serial in enumerate(sn_list):
+    for index, serial in enumerate(sn_list or []):
         if not isinstance(serial, dict):
             raise ValidationError("API05 snList[%s] must be an object" % index)
         _required(serial, ["productSN", "quantity", "palletCode", "productCode", "productName", "specificationModel"], "API05 snList[%s]" % index)
         _number(serial["quantity"], "API05 snList[%s].quantity" % index)
 
-    task = task_model.create({
+    task_values = {
         "count_order_no": payload["countOrderNo"],
         "project_id": project.id,
         "owner_code": payload["owner"],
         "warehouse_code": payload["warehouse"],
         "remark": payload.get("remark") or False,
-        "sn_list_json": json.dumps(sn_list, ensure_ascii=False),
-        "line_ids": line_values,
-    })
+    }
+    if details is not None:
+        task_values["line_ids"] = [(5, 0, 0)] + line_values
+    if sn_list is not None or action == "CREATE":
+        task_values["sn_list_json"] = json.dumps(sn_list or [], ensure_ascii=False)
+    if action == "CREATE":
+        task_values["line_ids"] = line_values
+        task = task_model.create(task_values)
+    else:
+        task.write(task_values)
     return {"success": True, "data": {"id": task.id, "countOrderNo": task.count_order_no}}
 
 
@@ -277,9 +329,18 @@ def api07(env, api_user, payload):
     _required(payload, ["owner", "productCode", "productName", "specificationModel", "unit", "productForm"], "API07")
     _project(api_user)
     code = payload["productCode"]
-    products = env["product.product"].sudo().search([("default_code", "=", code)], limit=2)
+    products = env["product.product"].sudo().search([
+        ("default_code", "=", code),
+        ("ginlong_owner_code", "=", payload["owner"]),
+    ], limit=2)
     if len(products) > 1:
-        raise ValidationError("Product code %s is ambiguous in the existing WMS product data" % code)
+        raise ValidationError("Owner/product key %s/%s is ambiguous in the existing WMS product data" % (payload["owner"], code))
+    if not products:
+        conflicting = env["product.product"].sudo().search([("default_code", "=", code)], limit=1)
+        if conflicting:
+            raise ValidationError(
+                "Product code %s already belongs to a different Ginlong owner; the existing WMS product code cannot be reassigned implicitly" % code
+            )
 
     units = env["uom.uom"].sudo().search([("name", "=", payload["unit"])], limit=2)
     if len(units) != 1:

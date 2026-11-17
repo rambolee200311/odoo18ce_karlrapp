@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_ginlong_apis" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.ginlong.apis</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app name="ginlong_apis" string="Ginlong APIs">
+                    <block title="入站 API 限流（每秒请求数）" name="ginlong_api_rate_limits">
+                        <setting string="API01 入库单" help="同一认证 API 用户每秒允许的 API01 请求数。">
+                            <field name="ginlong_api01_rate_limit"/>
+                        </setting>
+                        <setting string="API03 出库单" help="同一认证 API 用户每秒允许的 API03 请求数。">
+                            <field name="ginlong_api03_rate_limit"/>
+                        </setting>
+                        <setting string="API05 盘点单" help="同一认证 API 用户每秒允许的 API05 请求数。">
+                            <field name="ginlong_api05_rate_limit"/>
+                        </setting>
+                        <setting string="API07 产品档案" help="同一认证 API 用户每秒允许的 API07 请求数。">
+                            <field name="ginlong_api07_rate_limit"/>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+</odoo>

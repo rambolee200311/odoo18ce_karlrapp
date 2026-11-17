@@ -14,6 +14,12 @@ class GinlongStocktakeTask(models.Model):
     warehouse_code = fields.Char(required=True)
     remark = fields.Text()
     sn_list_json = fields.Text()
+    state = fields.Selection(
+        [("open", "Open"), ("cancel", "Cancelled")],
+        required=True,
+        default="open",
+        index=True,
+    )
     line_ids = fields.One2many('ginlong.stocktake.task.line', 'task_id', string='Products')
 
     def get_sn_list(self):

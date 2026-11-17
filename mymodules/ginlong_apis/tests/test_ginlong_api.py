@@ -4,11 +4,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from odoo import fields
+from odoo.exceptions import ValidationError
+from odoo.service.model import PG_CONCURRENCY_EXCEPTIONS_TO_RETRY
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.ginlong_apis import services
 from odoo.addons.ginlong_apis.controllers import ginlong_controller
 from odoo.addons.worlddepot.controllers import api_logs, validator_token
+from odoo.addons.ginlong_apis import idempotency, rate_limiter
 
 
 class _CursorContext:
@@ -168,7 +171,17 @@ class TestGinlongAPI(TransactionCase):
             "owner": "OWNER-01", "action": "DELETE", "inboundOrderNo": order.reference,
             "warehouse": "WH-01", "businessType": "STANDARD",
         })
-        self.assertFalse(order.exists())
+        self.assertTrue(order.exists())
+        self.assertEqual(order.state, "cancel")
+        self.assertEqual(len(order.inbound_order_product_ids), 1)
+        self.assertEqual(len(order.inbound_order_product_ids.product_serial_number_ids), 1)
+        services.api01(self.env, self.api_user, {
+            "owner": "OWNER-01", "action": "DELETE", "inboundOrderNo": order.reference,
+            "warehouse": "WH-01", "businessType": "STANDARD",
+        })
+        self.assertTrue(order.exists())
+        self.assertEqual(order.state, "cancel")
+        self.assertEqual(len(order.inbound_order_product_ids), 1)
 
     def test_api03_maps_all_source_fields_without_execution(self):
         result = services.api03(self.env, self.api_user, self._api03())
@@ -207,7 +220,16 @@ class TestGinlongAPI(TransactionCase):
             "owner": "OWNER-01", "action": "DELETE", "outboundOrderNo": order.reference,
             "warehouse": "WH-01", "businessType": "STANDARD",
         })
-        self.assertFalse(order.exists())
+        self.assertTrue(order.exists())
+        self.assertEqual(order.state, "cancel")
+        self.assertEqual(len(order.outbound_order_product_ids), 1)
+        services.api03(self.env, self.api_user, {
+            "owner": "OWNER-01", "action": "DELETE", "outboundOrderNo": order.reference,
+            "warehouse": "WH-01", "businessType": "STANDARD",
+        })
+        self.assertTrue(order.exists())
+        self.assertEqual(order.state, "cancel")
+        self.assertEqual(len(order.outbound_order_product_ids), 1)
 
     def test_api05_is_independent_and_preserves_task_scope(self):
         payload = {
@@ -241,7 +263,14 @@ class TestGinlongAPI(TransactionCase):
         services.api05(self.env, self.api_user, {
             "owner": "OWNER-01", "action": "DELETE", "countOrderNo": "COUNT-001", "warehouse": "WH-01",
         })
-        self.assertFalse(task.exists())
+        self.assertTrue(task.exists())
+        self.assertEqual(task.state, "cancel")
+        self.assertEqual(len(task.line_ids), 1)
+        services.api05(self.env, self.api_user, {
+            "owner": "OWNER-01", "action": "DELETE", "countOrderNo": "COUNT-001", "warehouse": "WH-01",
+        })
+        self.assertTrue(task.exists())
+        self.assertEqual(task.state, "cancel")
 
     def test_api07_creates_and_updates_native_product(self):
         unit = self.env.ref("uom.product_uom_unit")
@@ -274,6 +303,206 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(product.name, "Ginlong API07 product updated")
         self.assertEqual(product.ginlong_power, "6kW")
 
+        other_owner_payload = dict(payload, owner="OWNER-02")
+        with self.assertRaises(ValidationError):
+            services.api07(self.env, self.api_user, other_owner_payload)
+
+    def test_api01_and_api03_update_existing_orders(self):
+        inbound = services.api01(self.env, self.api_user, self._api01("GINLONG-IN-UPDATE"))
+        inbound_order = self.env["world.depot.inbound.order"].browse(inbound["data"]["id"])
+        services.api01(self.env, self.api_user, {
+            "owner": "OWNER-02", "action": "UPDATE", "inboundOrderNo": inbound_order.reference,
+            "warehouse": "WH-02", "businessType": "UPDATED", "remark": "updated inbound",
+        })
+        self.assertEqual(inbound_order.ginlong_owner_code, "OWNER-02")
+        self.assertEqual(inbound_order.ginlong_warehouse_code, "WH-02")
+        self.assertEqual(inbound_order.ginlong_business_type, "UPDATED")
+        self.assertEqual(inbound_order.remark, "updated inbound")
+
+        outbound = services.api03(self.env, self.api_user, self._api03("GINLONG-OUT-UPDATE"))
+        outbound_order = self.env["world.depot.outbound.order"].browse(outbound["data"]["id"])
+        services.api03(self.env, self.api_user, {
+            "owner": "OWNER-02", "action": "UPDATE", "outboundOrderNo": outbound_order.reference,
+            "warehouse": "WH-02", "businessType": "UPDATED", "remark": "updated outbound",
+        })
+        self.assertEqual(outbound_order.ginlong_owner_code, "OWNER-02")
+        self.assertEqual(outbound_order.ginlong_warehouse_code, "WH-02")
+        self.assertEqual(outbound_order.ginlong_business_type, "UPDATED")
+        self.assertEqual(outbound_order.remark, "updated outbound")
+
+    def test_api05_update_existing_task_without_stock_access(self):
+        created = services.api05(self.env, self.api_user, {
+            "owner": "OWNER-01", "action": "CREATE", "countOrderNo": "COUNT-UPDATE",
+            "warehouse": "WH-01", "details": [{
+                "productCode": self.product.default_code, "productName": "Before",
+                "specificationModel": "MODEL", "quantity": 3,
+            }], "snList": [],
+        })
+        task = self.env["ginlong.stocktake.task"].browse(created["data"]["id"])
+        services.api05(self.env, self.api_user, {
+            "owner": "OWNER-02", "action": "UPDATE", "countOrderNo": "COUNT-UPDATE",
+            "warehouse": "WH-02", "remark": "updated",
+        })
+        self.assertEqual(task.owner_code, "OWNER-02")
+        self.assertEqual(task.warehouse_code, "WH-02")
+        self.assertEqual(task.remark, "updated")
+        self.assertEqual(task.line_ids.product_name, "Before")
+
+    def test_idempotency_replays_canonical_request_once(self):
+        payload = self._api01("GINLONG-IDEM-001")
+        calls = []
+
+        def operation():
+            calls.append(True)
+            return {"success": True, "data": {"id": 123}}
+
+        first = idempotency.execute(self.env, "API01", payload, operation)
+        replay_payload = dict(reversed(list(payload.items())))
+        replay = idempotency.execute(self.env, "API01", replay_payload, operation)
+        self.assertEqual(first, replay)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API01"), ("business_key", "=", "GINLONG-IDEM-001"),
+        ]), 1)
+        self.assertEqual(
+            idempotency._canonical_json({"a": 1, "b": [1, 2]}),
+            idempotency._canonical_json({"b": [1, 2], "a": 1}),
+        )
+        self.assertNotEqual(
+            idempotency._canonical_json({"items": [1, 2]}),
+            idempotency._canonical_json({"items": [2, 1]}),
+        )
+
+    def test_idempotency_business_keys_and_different_content_reach_operation(self):
+        self.assertEqual(idempotency._business_key("API01", {"inboundOrderNo": "IN-KEY"}), "IN-KEY")
+        self.assertEqual(idempotency._business_key("API03", {"outboundOrderNo": "OUT-KEY"}), "OUT-KEY")
+        self.assertEqual(idempotency._business_key("API05", {"countOrderNo": "COUNT-KEY"}), "COUNT-KEY")
+        self.assertEqual(
+            idempotency._business_key("API07", {"owner": "O1", "productCode": "P1"}),
+            '["O1","P1"]',
+        )
+        self.assertNotEqual(
+            idempotency._business_key("API07", {"owner": "O1", "productCode": "P1"}),
+            idempotency._business_key("API07", {"owner": "O2", "productCode": "P1"}),
+        )
+        first_payload = {"inboundOrderNo": "IN-DIFF", "action": "CREATE", "remark": "first"}
+        update_payload = {"inboundOrderNo": "IN-DIFF", "action": "UPDATE", "remark": "changed"}
+        calls = []
+        first = idempotency.execute(
+            self.env, "API01", first_payload,
+            lambda: calls.append("create") or {"success": True, "data": {"state": "new"}},
+        )
+        updated = idempotency.execute(
+            self.env, "API01", update_payload,
+            lambda: calls.append("update") or {"success": True, "data": {"state": "new", "remark": "changed"}},
+        )
+        self.assertTrue(first["success"] and updated["success"])
+        self.assertEqual(calls, ["create", "update"])
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API01"), ("business_key", "=", "IN-DIFF"),
+        ]), 2)
+
+        owner_calls = []
+        for owner in ("OWNER-A", "OWNER-B"):
+            owner_payload = {"owner": owner, "productCode": "SAME-PRODUCT-CODE", "action": "UPDATE"}
+            result = idempotency.execute(
+                self.env, "API07", owner_payload,
+                lambda: owner_calls.append(owner) or {"success": True, "data": {"owner": owner}},
+            )
+            self.assertTrue(result["success"])
+        self.assertEqual(owner_calls, ["OWNER-A", "OWNER-B"])
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API07"), ("business_key", "ilike", "SAME-PRODUCT-CODE"),
+        ]), 2)
+
+    def test_idempotency_failure_rolls_back_and_allows_retry(self):
+        payload = self._api01("GINLONG-IDEM-RETRY")
+
+        def failed_operation():
+            self.env["res.partner"].create({"name": "Ginlong rollback probe"})
+            raise ValidationError("injected failure")
+
+        with self.assertRaises(ValidationError):
+            idempotency.execute(self.env, "API01", payload, failed_operation)
+        self.assertEqual(self.env["res.partner"].search_count([("name", "=", "Ginlong rollback probe")]), 0)
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API01"), ("business_key", "=", "GINLONG-IDEM-RETRY"),
+        ]), 0)
+        result = idempotency.execute(self.env, "API01", payload, lambda: {"success": True, "data": {"id": 456}})
+        self.assertTrue(result["success"])
+
+        false_payload = {"countOrderNo": "COUNT-FALSE", "action": "CREATE", "owner": "OWNER-01", "warehouse": "WH-01"}
+        rejected = idempotency.execute(
+            self.env, "API05", false_payload,
+            lambda: self.env["res.partner"].create({"name": "Ginlong false-result probe"}) and {"success": False, "error": "rejected"},
+        )
+        self.assertFalse(rejected["success"])
+        self.assertEqual(self.env["res.partner"].search_count([("name", "=", "Ginlong false-result probe")]), 0)
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API05"), ("business_key", "=", "COUNT-FALSE"),
+        ]), 0)
+
+    def test_missing_business_key_does_not_create_success_record(self):
+        cases = [
+            ("API01", services.api01, {"owner": "OWNER-01", "action": "CREATE"}),
+            ("API03", services.api03, {"owner": "OWNER-01", "action": "CREATE"}),
+            ("API05", services.api05, {"owner": "OWNER-01", "action": "CREATE"}),
+            ("API07", services.api07, {"owner": "OWNER-01", "productName": "missing-code"}),
+        ]
+        controller = ginlong_controller.GinlongSimulationController()
+        for api_code, handler, payload in cases:
+            fake_request = SimpleNamespace(
+                httprequest=SimpleNamespace(data=json.dumps(payload).encode("utf-8")),
+                env=self.env,
+                api_user=self.api_user,
+            )
+            with patch.object(ginlong_controller, "request", fake_request):
+                response = controller._dispatch(api_code, handler)
+            self.assertFalse(json.loads(response.get_data(as_text=True))["success"])
+            self.assertEqual(self.env["ginlong.api.idempotency"].search_count([("api_code", "=", api_code)]), 0)
+
+    def test_database_concurrency_errors_are_left_for_odoo_http_retry(self):
+        payload = self._api01("GINLONG-CONCURRENCY-RETRY")
+        fake_request = SimpleNamespace(
+            httprequest=SimpleNamespace(data=json.dumps(payload).encode("utf-8")),
+            env=self.env,
+            api_user=self.api_user,
+        )
+        controller = ginlong_controller.GinlongSimulationController()
+        error_class = PG_CONCURRENCY_EXCEPTIONS_TO_RETRY[0]
+        error = error_class("simulated Odoo concurrency conflict")
+        with patch.object(ginlong_controller, "request", fake_request):
+            with self.assertRaises(error_class):
+                controller._dispatch("API01", lambda *_args: (_ for _ in ()).throw(error))
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API01"), ("business_key", "=", "GINLONG-CONCURRENCY-RETRY"),
+        ]), 0)
+
+        logger_request = SimpleNamespace(
+            httprequest=SimpleNamespace(
+                data=json.dumps(payload).encode("utf-8"), remote_addr="127.0.0.1", path="/ginlong/sim/api01",
+            ),
+            env=SimpleNamespace(cr=SimpleNamespace(rollback=lambda: self.fail("logger must not rollback retryable transaction"))),
+            registry=SimpleNamespace(cursor=_CursorContext),
+        )
+
+        @api_logs.api_logger
+        def raise_concurrency_error():
+            raise error_class("simulated logger concurrency conflict")
+
+        with patch.object(api_logs, "request", logger_request):
+            with self.assertRaises(error_class):
+                raise_concurrency_error()
+
+    def test_api_rate_defaults_and_configuration(self):
+        settings = self.env["res.config.settings"].sudo()
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API01"), 10)
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API03"), 10)
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API05"), 10)
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API07"), 100)
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api07_rate_limit", "140")
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API07"), 140)
+
     def test_routes_use_worlddepot_token_and_api_log_decorators(self):
         token_value = "ginlong-api-test-token"
         self.env["world.depot.api.token"].create({
@@ -305,7 +534,7 @@ class TestGinlongAPI(TransactionCase):
             while function:
                 wrapper_count += 1
                 function = getattr(function, "__wrapped__", False)
-            self.assertGreaterEqual(wrapper_count, 2)
+            self.assertGreaterEqual(wrapper_count, 3)
 
     def test_api01_decorated_route_authenticates_and_logs_with_existing_logger(self):
         token_value = "ginlong-route-test-token"
@@ -343,10 +572,14 @@ class TestGinlongAPI(TransactionCase):
         with patch.object(validator_token, "request", valid_request), \
                 patch.object(api_logs, "request", valid_request), \
                 patch.object(ginlong_controller, "request", valid_request), \
-                patch.object(api_logs.api, "Environment", side_effect=environment_factory):
+                patch.object(rate_limiter, "request", valid_request), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory), \
+                patch.object(rate_limiter, "_reserve", return_value=True):
             response = endpoint.api01()
 
-        self.assertTrue(response["success"], response)
+        response_body = json.loads(response.get_data(as_text=True))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response_body["success"], response_body)
         self.assertEqual(len(log_model.values), 1)
         log = log_model.values[0]
         self.assertEqual(log["request_path"], "/ginlong/sim/api01")
@@ -364,3 +597,44 @@ class TestGinlongAPI(TransactionCase):
             rejected = endpoint.api01()
         self.assertEqual(rejected.status_code, 401)
         self.assertEqual(existing, self.env["world.depot.inbound.order"].search([("reference", "=", "GINLONG-IN-ROUTE")]))
+
+    def test_rate_limit_response_is_http_429_and_logged(self):
+        endpoint = ginlong_controller.GinlongSimulationController()
+        token_value = "ginlong-rate-limit-test-token"
+        self.env["world.depot.api.token"].create({
+            "user_id": self.api_user.user_id.id,
+            "token": token_value,
+            "expires": fields.Datetime.now() + timedelta(hours=1),
+        })
+        log_model = _LogModel()
+        log_environment = _LogEnvironment(log_model)
+        original_environment = api_logs.api.Environment
+
+        def environment_factory(cr, uid, context, *args, **kwargs):
+            if isinstance(cr, _CursorContext):
+                return log_environment
+            return original_environment(cr, uid, context, *args, **kwargs)
+
+        request_context = SimpleNamespace(
+            httprequest=SimpleNamespace(
+                data=json.dumps(self._api01("GINLONG-RATE-429")).encode("utf-8"),
+                remote_addr="127.0.0.1",
+                path="/ginlong/sim/api01",
+                headers={"Authorization": "Bearer " + token_value},
+            ),
+            env=self.env,
+            registry=SimpleNamespace(cursor=_CursorContext),
+            api_user=False,
+            update_env=lambda user: None,
+            _ginlong_rate_results={"API01": (False, fields.Datetime.now().replace(microsecond=0), 10)},
+        )
+        with patch.object(validator_token, "request", request_context), \
+                patch.object(api_logs, "request", request_context), \
+                patch.object(ginlong_controller, "request", request_context), \
+                patch.object(rate_limiter, "request", request_context), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory):
+            response = endpoint.api01()
+        self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
+        self.assertEqual(log_model.values[0]["code"], "429")
+        self.assertFalse(log_model.values[0]["success"])
