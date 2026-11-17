@@ -43,6 +43,7 @@
 | DDD | N/A | 不适用；理由见 TDD §0.2 | TDD §0.2 |
 | TV / Spike | Ginlong TV v0.2 | 有条件通过；TV 本身未冻结 | [TV 报告](../context/report/TV_ginlong_apis_v0.2.md) |
 | TDD | ginlong_apis v0.3 | FROZEN WITH OPEN ITEMS | [TDD](../ginlong_apis/TDD.md) |
+| 项目架构认知 | v1.0（2026-11-17） | 用户确认的职责边界与数据流原则；不替代 SRS/TDD/CC | [PROJECT_COGNITION](../context/cognition/PROJECT_COGNITION.md) |
 | Odoo / WMS | Odoo 18.0 CE、`worlddepot` | 已检查源码；使用现有开发环境数据库 `odooce_karlrapp`，运行配置待实施时核对 | [TDD §1、§3](../ginlong_apis/TDD.md) |
 | 外部字段资料 | Ginlong 集成 V3.1 | 参考资料，不是最终报文契约 | [工作簿](../ginlong_apis/海外WMS与第三方系统集成V3.1.xlsx) |
 

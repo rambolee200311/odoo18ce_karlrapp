@@ -11,6 +11,7 @@
 | 当前状态 | **Draft / 上游基线门禁未满足 / 不得实施** |
 | 计划阶段 | Implementation Plan v1.0 阶段 1：入站订单、产品与盘点任务 |
 | 上游基线现状 | SRS v1.0 Frozen；TDD v0.3 Frozen with Open Items；Plan v1.0 Frozen |
+| 项目架构认知 | [PROJECT_COGNITION.md](../context/cognition/PROJECT_COGNITION.md) v1.0；Ginlong → Odoo → Gateway → Karl Rapp 实际执行 → Odoo `stock.picking` / 原生库存记录；Order 与 `stock.picking` 松耦合 |
 | 关联文件 | [SRS](../requirement/SRS_ginlong_apis.md)、[TDD](../ginlong_apis/TDD.md)、[Implementation Plan](IMPLEMENTATION_PLAN_ginlong_apis.md) |
 | 前序 CC | [CC-GIN-001 v1.0 Closed](CC-GIN-001.md)；[FR-GIN-001 v1.0](FR-GIN-001.md) |
 | 模板同步 | BLOCKED：`check_template_sync.py --template cc` 未找到项目模板来源。本文件仅为按用户要求形成的 Draft，不表示模板同步通过 |
@@ -38,6 +39,7 @@
 ### 2.2 边界
 
 - Odoo 是 Ginlong 与 Karl Rapp 间的数据交换枢纽；`ginlong_apis` 只处理 Ginlong ↔ Odoo。既有 WMS 负责订单作业及库存，`karlrapp_gateway` 负责 Odoo ↔ KR。
+- Order 记录业务指令，`stock.picking` 记录 Karl Rapp 返回的实际执行结果；两者不建立强制外键，可按业务标识匹配核对，允许一张 Order 对应多次执行。库存只依据实际执行结果走 Odoo 原生库存流程。
 - API01/03 只做字段映射并调用现有 WMS 服务，不重复实现仓库收货、发货、拣货、上架或库存业务逻辑。
 - API05 盘点模型独立于库存账。禁止访问/读写 `stock.quant`，禁止调用库存调整或过账服务；盘点任务/采集不得改变在库数量。
 - API07 不另建 Ginlong 产品档案或映射模型。除明确字段完整性、格式、权限与现有 WMS 主数据规则外，不增加货主-产品归属等新业务校验。
