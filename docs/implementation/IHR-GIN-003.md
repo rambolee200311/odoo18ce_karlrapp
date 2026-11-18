@@ -5,14 +5,14 @@
 | 字段 | 值 |
 |---|---|
 | CC | [CC-GIN-003 v1.4 最终规则实施与验证增补](CC-GIN-003-v1.4.md)；v1.1 冻结基线及 v1.2/v1.3 历史保留 |
-| IHR 版本 | v1.1 |
+| IHR 版本 | v1.2 |
 | TDD 基线 | [TDD v0.7 实施验证修订](../ginlong_apis/TDD-v0.7.md)；v0.4–v0.6 历史保留 |
 | 模块 | `ginlong_apis`、`worlddepot` 盘点业务模型与回传界面 |
 | 工作类型 | API 幂等/限流、持久化手动回传 Form、盘点双模型及定向自动化测试 |
 | 实施负责人 | Codex |
 | 开始 / 最后更新 | 2026-11-17 / 2026-11-18 |
 | 最新 addon 基线 | ginlong_apis 18.0.2.0.6；ATR-RUN-041–048 记录本轮最终规则、全量 Odoo 自动化及 ORM registry 核验 |
-| 当前实施状态 | 本地 CC-TEST-001–024 自动化验收满足，提交 Human Review 关闭评估；五个人工回传使用标准 Form/Notebook，无回传 Wizard |
+| 当前实施状态 | CC-GIN-003 已 Closed；FR-GIN-003 v1.0 Closure SATISFIED、Human Review APPROVED；五个人工回传使用标准 Form/Notebook，无回传 Wizard |
 | 模板同步 | BLOCKED：项目模板来源缺失；沿用已批准例外，不记为通过 |
 
 ## 1. CC 基线
@@ -37,7 +37,7 @@
 | 偏离 | 不新增外部基础设施；五个按钮同步执行设计保留，但协议未决时不触发 HTTP；未改 `stock.picking` 库存流程或 Gateway |
 | Stop Condition | 未触发额外业务规则；事务自动化已完成。完整 WMS 人工 E2E 不属于本 CC，留最终集成 CC |
 | Open Issues | Ginlong 外部撤销/部分执行语义及真实联调；模板同步 BLOCKED（已批准流程例外）；逐项见 ATR §7 |
-| 当前状态 | Ready for Human Review；不自行关闭 |
+| 当前状态 | Closed；Human Review APPROVED，依据 FR-GIN-003 v1.0 |
 
 ## 3. 实施历史条目（仅追加）
 
@@ -245,6 +245,14 @@
 - Evidence：当前接口资料记录、ATR-GIN-003 v1.1；原 V3.2 对方向资料不足的同期判断保留为历史，不伪记其当时已确认。
 - Result：API03 当前方向已确认；真实环境联调 NOT RUN。
 
+### IHR-020 — Human Review 批准关闭
+
+- 阶段：Closure
+- Action：按 Human Review 决定更新 CC-GIN-003 状态为 Closed，完成 FR-GIN-003 v1.0（Closure SATISFIED；Human Review APPROVED），并更新实施计划状态。关闭依据为冻结 CC-GIN-003 v1.1 及已批准的 v1.2–v1.4 修订；关闭记录见 CC-GIN-003 v1.5。
+- Evidence：CC-TEST-001–024 的有效证据见 ATR-GIN-003；CC-TEST-010/017/019 沿用 ATR-RUN-014/016/026，不因关闭重跑。实施代码基线为 `481ca003f17d1a7799d3e38978357205baf80578`；本次关闭只更新文档，没有修改代码或测试结果。
+- Open Items：Ginlong 真实联调、外部撤销/部分执行语义、完整浏览器/WMS 人工 E2E、项目货主解绑与托盘生命周期后续工作继续按 ATR/实施计划记录；模板同步仍 BLOCKED，沿用已批准例外，均未伪记为 PASS。
+- Result：CC-GIN-003 Closed；项目级其他阶段不因此视为完成。
+
 ## 4. 实际变更清单（当前快照）
 
 | 文件 / 组件 | 当前变更 | 追溯 |
@@ -273,7 +281,7 @@
 
 ## 6. 移交摘要
 
-本地实施和自动化完成。五个人工回传继续使用持久化业务 Form/Notebook；API07 复合键与 WMS owner resolver、API02/08 实际明细状态、API06 实际托盘/重量/覆盖均按用户最终规则实现。ATR-RUN-048 Ginlong 全量 31 项、RUN-044 worlddepot 全量 8 项、RUN-046 最终规则定向 3 项和 RUN-045 ORM registry 核验通过；CC-TEST-010/017/019 沿用既有通过证据，本轮不重跑。真实 Ginlong 和完整人工 WMS E2E 留最终集成 CC；模板同步继续 BLOCKED 并保留批准例外。当前 CC 具备 Human Review 关闭评估条件，未经批准不标记 Closed、不生成关闭 FR。
+CC-GIN-003 已按 Human Review APPROVED 正式关闭。五个人工回传继续使用持久化业务 Form/Notebook；API07 复合键与 WMS owner resolver、API02/08 实际明细状态、API06 实际托盘/重量/覆盖均按用户最终规则实现。ATR-RUN-048 Ginlong 全量 31 项、RUN-044 worlddepot 全量 8 项、RUN-046 最终规则定向 3 项和 RUN-045 ORM registry 核验通过；CC-TEST-010/017/019 沿用既有通过证据，本轮未重跑。真实 Ginlong 和完整人工 WMS E2E 留最终集成 CC；模板同步继续 BLOCKED 并保留批准例外。
 
 ## 附录：版本记录
 
@@ -290,3 +298,4 @@
 | v0.9 | 2026-11-18 | 追加 IHR-017：在持久化业务 Form 展示 API02/08 Order state/status 及 API06 Order/picking 备货来源字段；3 个 Odoo post-tests 通过；未增加未经确认的 Ginlong 字段映射，CC-TEST-023 与 API02/06/08 Open Items 保留 | In Progress |
 | v1.0 | 2026-11-18 | 追加 IHR-018：纳入 API07 owner+productCode 和现有 WMS resolver、API02/08 持久化实际明细及混合状态阻止、API06 JSON string/重量/手工覆盖；记录 ATR-RUN-041–048、ORM registry 及关闭验收评估 | Ready for Human Review |
 | v1.1 | 2026-11-18 | 追加 IHR-019：根据后续 Ginlong 接口矩阵确认 API03 Ginlong→Odoo，保留早期 A-003 作为历史假设；真实联调仍未执行 | Ready for Human Review |
+| v1.2 | 2026-11-18 | 追加 IHR-020：记录 Human Review APPROVED、FR-GIN-003 v1.0 及 CC-GIN-003 Closed；保留未执行的外部/人工场景和模板同步 BLOCKED 事实 | Closed |

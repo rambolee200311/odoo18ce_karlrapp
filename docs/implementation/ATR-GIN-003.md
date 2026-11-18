@@ -2,15 +2,16 @@
 
 ## 0. 文档治理
 
-本记录保留 [CC-GIN-003 v1.1 Frozen with Open Items](CC-GIN-003-v1.1.md) 及 v1.2/v1.3 历史结果，并追加 [CC-GIN-003 v1.4](CC-GIN-003-v1.4.md) 的实施证据。五个人工回传接口与四个入站接口分区记录。项目模板同步保持 `BLOCKED`，沿用已批准的流程例外，不记为通过。
+本记录保留 [CC-GIN-003 v1.1 Frozen with Open Items](CC-GIN-003-v1.1.md) 及 v1.2/v1.3 历史结果，并追加 [CC-GIN-003 v1.4](CC-GIN-003-v1.4.md) 的实施证据及 [v1.5 关闭记录](CC-GIN-003-v1.5.md)。五个人工回传接口与四个入站接口分区记录。项目模板同步保持 `BLOCKED`，沿用已批准的流程例外，不记为通过。
 
 ## 1. 执行元数据
 
 | 字段 | 值 |
 |---|---|
 | Intent ID | `GINLONG-API-IDEMPOTENCY-RATELIMIT-001` |
+| ATR 版本 | v1.2 |
 | IHR | [IHR-GIN-003](IHR-GIN-003.md) |
-| CC | [CC-GIN-003 v1.4](CC-GIN-003-v1.4.md) 实施增补；v1.1 冻结基线及后续历史版本保留 |
+| CC | [CC-GIN-003 v1.4](CC-GIN-003-v1.4.md) 实施增补；[v1.5 Closed](CC-GIN-003-v1.5.md)；v1.1 冻结基线及后续历史版本保留 |
 | Module | `ginlong_apis`、`worlddepot` 受影响代码 |
 | Environment | Odoo 18；既有 `venv`、`odoo.conf`、数据库 `odooce_karlrapp` |
 | Test Framework | Odoo 标准 `TransactionCase` / test runner；真实四 Worker 本机 HTTP/ORM 验证；本机响应丢失代理 |
@@ -36,7 +37,7 @@
 | NOT RUN | Ginlong 真实环境、完整浏览器人工回传与完整 WMS 人工 E2E；后两项留最终集成 CC |
 | 最新有效自动化运行 | ATR-RUN-048 Ginlong 最终全量 31 项、ATR-RUN-044 worlddepot 全量 8 项，均 0 failed / 0 error；ATR-RUN-046 三项最终规则定向测试亦通过；首次失败 ATR-RUN-041 保留 |
 | 最新 ORM 基线 | 2026-11-18 Odoo Shell ORM 只读确认收/发货明细模型、API06 汇总字段、owner/weight 与 move-line 来源字段注册，callback Wizard 未注册；Ginlong module installed |
-| CC-GIN-003 整体状态 | 本地验收条件满足，提交 Human Review 关闭评估；未自行标记 Closed |
+| CC-GIN-003 整体状态 | Closed；FR-GIN-003 v1.0 Closure SATISFIED、Human Review APPROVED |
 
 历史 ATR-RUN-004 及 CC-TEST-010/017/019 的失败/修复和多 Worker 证据均保留。原先 Wizard 方案与运行记录是历史实现；当前 v1.2 使用持久化 Form/Notebook。API04 仅发送已保存选中的 picking；API10 仅发送已保存选中的实盘结果。API06 的既有备货事件仍为出库 Order `status='picking'`、`picking_PICK` 和 `picking_PICK_date`，没有新增状态门禁。回传本地 Mock 自动化与外部协议 Open Items 分开统计。
 
@@ -276,6 +277,10 @@ Ginlong 测试/正式 Base URL 和无鉴权/Key 事实沿用 TDD v0.4.1。用户
 
 ATR-RUN-048 Ginlong 全量 31 post-tests、ATR-RUN-044 `worlddepot` 全量 8 post-tests、ATR-RUN-046 最终规则定向 3 post-tests 均为 0 failed / 0 error。外部撤销/部分执行语义与真实联调仍按最终集成 CC 承接；它们未被伪记通过，也不阻塞本 CC 已确认正常场景。模板同步仍 `BLOCKED`，沿用批准的流程例外。
 
+### 7.5 关闭状态记录
+
+2026-11-18，Human Review 批准 CC-GIN-003 关闭。FR-GIN-003 v1.0 判定 Closure SATISFIED；CC-GIN-003 v1.5 登记 Closed，Implementation Plan v1.5 同步状态。关闭阶段未修改代码、未新增测试运行，也未覆盖任何既有 ATR 结果。真实 Ginlong 联调、完整浏览器/WMS 人工 E2E、外部撤销/部分执行语义和项目后续需求仍按各自 Open Items 管理；模板同步继续 BLOCKED，沿用已批准例外。
+
 ## 8. 多 Worker 限流性能验收结果
 
 CC-TEST-016 已按冻结标准完成：四个 Odoo HTTP worker、16 个 HTTP 客户端，在同一 UTC 固定秒窗口提交 101 个不同且有效的 API07 产品请求；100 个返回 HTTP 200，1 个返回 HTTP 429 并带 `Retry-After: 1`。完整时延、事务冲突/重试和 ORM 结果见 CC-TEST-016 矩阵与 ATR-RUN-010。首次无效客户端突发失败及旧 worker 阈值缓存运行均保留在 ATR-RUN-009、011，不覆盖有效结果。
@@ -328,7 +333,7 @@ venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --test-
 
 ## 10. 移交摘要
 
-本地 CC-TEST-001–024 自动化验收均有通过证据：Ginlong 最终全量 31 项、worlddepot 全量 8 项、最终规则定向 3 项和 ORM registry 核验通过；CC-TEST-010/017/019 沿用既有通过证据，本轮未重跑。用户已确认 API02/08 混合状态不发送、API06 数值为 JSON string、重量字段取 `product.ginlong_weight`，实现和测试结果见 §7.4。外部撤销/部分执行语义、完整人工 WMS E2E 和真实 Ginlong 联调留最终集成 CC；模板同步仍 BLOCKED 且沿用已批准流程例外。CC-GIN-003 满足提交 Human Review 关闭评估的条件；不自行标记 Closed、不生成关闭 FR。
+本地 CC-TEST-001–024 自动化验收均有通过证据：Ginlong 最终全量 31 项、worlddepot 全量 8 项、最终规则定向 3 项和 ORM registry 核验通过；CC-TEST-010/017/019 沿用既有通过证据，本轮未重跑。用户已确认 API02/08 混合状态不发送、API06 数值为 JSON string、重量字段取 `product.ginlong_weight`，实现和测试结果见 §7.4。外部撤销/部分执行语义、完整人工 WMS E2E 和真实 Ginlong 联调留最终集成 CC；模板同步仍 BLOCKED 且沿用已批准流程例外。CC-GIN-003 已依据 FR-GIN-003 v1.0（Closure SATISFIED；Human Review APPROVED）关闭；本轮未重跑测试。
 
 ## 附录：版本记录
 
@@ -344,3 +349,4 @@ venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --test-
 | v0.9 | 2026-11-18 | 追加 ATR-RUN-040；更新持久化回传 Form 展示 API02/08 Order 状态及 API06 备货来源字段，并以 3 个 Odoo post-tests 验证展示与未决项隔离。未推导 Ginlong wire 映射，CC-TEST-023 与 API02/06/08 Open Items 保留。 | In Progress |
 | v1.0 | 2026-11-18 | 追加 ATR-RUN-041–048：保留首次失败；Ginlong 最终 31 项、worlddepot 8 项、最终规则定向 3 项及 ORM registry 核验通过。API02/08 混合状态阻止及 API06 JSON string 按用户最终确认实现；本地验收通过并提交 Human Review 关闭评估。 | Ready for Human Review |
 | v1.1 | 2026-11-18 | 勘误当前记录：依据后续 Ginlong 接口矩阵确认 API03 为 Ginlong→Odoo；将 A-003 降为历史假设，真实外部联调仍未执行。保留所有旧分析与测试记录。 | Ready for Human Review |
+| v1.2 | 2026-11-18 | 追加关闭状态记录：依据 FR-GIN-003 v1.0 与 Human Review APPROVED，将 CC-GIN-003 当前状态标记 Closed；不新增测试运行，全部原始测试结果和模板同步 BLOCKED 记录保留 | CC-GIN-003 Closed |
