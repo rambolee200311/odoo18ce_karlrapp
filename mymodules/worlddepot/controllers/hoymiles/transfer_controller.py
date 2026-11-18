@@ -5,6 +5,7 @@ from odoo.exceptions import UserError
 from ..validator_token import validate_token
 from odoo.http import request, Response
 from ..api_logs import api_logger
+from .product_lookup import resolve_product
 
 _logger = logging.getLogger(__name__)
 
@@ -17,11 +18,7 @@ class TransferOrderAPI(http.Controller):
             for field in mandatory_product_fields:
                 if field not in product:
                     raise ValueError(f'Missing mandatory field in product: {field}')
-            odoo_product = request.env['product.product'].sudo().search([
-                '|',
-                ('barcode', '=', product['product_id']),
-                ('default_code', '=', product['product_id'])
-            ], limit=1)
+            odoo_product = resolve_product(product['product_id'])
 
             if not odoo_product:
                 raise ValueError(f'Product not found: {product["product_id"]}')
@@ -234,10 +231,7 @@ class TransferOrderAPI(http.Controller):
                 # Create new product lines
                 line_vals = []
                 for product in data.get('products', []):
-                    odoo_product = request.env['product.product'].sudo().search([
-                        '|', ('barcode', '=', product['product_id']),
-                        ('default_code', '=', product['product_id'])
-                    ], limit=1)
+                    odoo_product = resolve_product(product['product_id'])
                     
                     if not odoo_product:
                         return {'error': f'Product not found: {product["product_id"]}'}

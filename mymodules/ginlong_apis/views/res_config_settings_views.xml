@@ -21,6 +21,23 @@
                             <field name="ginlong_api07_rate_limit"/>
                         </setting>
                     </block>
+                    <block title="回传 API Endpoint（固定 POST，JSON）" name="ginlong_callback_endpoints">
+                        <setting string="API02 收货确认">
+                            <field name="ginlong_api02_callback_url" placeholder="完整 URL，路径：/API/WMS_JSON/TPL_Receipt_Confirmation"/>
+                        </setting>
+                        <setting string="API04 入库完成">
+                            <field name="ginlong_api04_callback_url" placeholder="完整 URL，路径：/API/WMS_JSON/TPL_Inbound_Completion"/>
+                        </setting>
+                        <setting string="API06 备货完成">
+                            <field name="ginlong_api06_callback_url" placeholder="完整 URL，路径：/API/WMS_JSON/TPL_Picking_Completed"/>
+                        </setting>
+                        <setting string="API08 发货完成">
+                            <field name="ginlong_api08_callback_url" placeholder="完整 URL，路径：/API/WMS_JSON/TPL_Shipment_Completed"/>
+                        </setting>
+                        <setting string="API10 盘点完成">
+                            <field name="ginlong_api10_callback_url" placeholder="完整 URL，路径：/API/WMS_JSON/TPL_Stocktaking_Completed"/>
+                        </setting>
+                    </block>
                 </app>
             </xpath>
         </field>

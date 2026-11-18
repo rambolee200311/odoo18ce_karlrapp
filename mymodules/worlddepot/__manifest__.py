@@ -15,7 +15,7 @@
     # Check https://github.com/odoo/odoo/blob/15.0/odoo/addons/base/data/ir_module_category_data.xml
     # for the full list
     'category': 'Uncategorized',
-    'version': '0.2',
+    'version': '0.3',
 
     # any module necessary for this one to work correctly
     'depends': ['base','contacts','web','mail','stock','project','product', 'wd_charge_pricing', 'wd_project_profile', 'wd_product_profile'],
@@ -49,6 +49,7 @@
         'views/hoymiles/hoymiles_api_urls.xml',
         'views/inbound_order_charge.xml',
         'views/outbound_order_pack_info.xml',
+        'views/stocktake.xml',
         'views/outbound_order_charge.xml',
         'views/my_dashboard.xml',
         'views/my_route.xml',

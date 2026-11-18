@@ -16,7 +16,7 @@ _logger = logging.getLogger(__name__)
 
 
 class GinlongSimulationController(http.Controller):
-    """Local simulation endpoints; not Ginlong's confirmed production routes."""
+    """Ginlong inbound routes plus the former local simulation aliases."""
 
     @staticmethod
     def _json_response(body, status=200):
@@ -31,6 +31,10 @@ class GinlongSimulationController(http.Controller):
             payload = json.loads(request.httprequest.data or b"{}")
             if not isinstance(payload, dict):
                 return self._json_response({"success": False, "error": "Request body must be a JSON object"})
+            request_path = getattr(request.httprequest, "path", "")
+            payload = services.normalize_inbound_action(
+                api_code, payload, strict=request_path.startswith("/api/ginlong/"),
+            )
             api_user = getattr(request, "api_user", False)
             if not api_user:
                 return self._json_response({"success": False, "error": "Authenticated API user is not configured"})
@@ -53,14 +57,14 @@ class GinlongSimulationController(http.Controller):
             _logger.info("Ginlong local simulation request rejected: %s", error)
             return self._json_response({"success": False, "error": str(error)})
 
-    @http.route('/ginlong/sim/api01', type='http', auth='none', methods=['POST'], csrf=False)
+    @http.route(['/ginlong/sim/api01', '/api/ginlong/TPL_Pending_Receipt_Note'], type='http', auth='none', methods=['POST'], csrf=False)
     @validate_token
     @api_logger
     @rate_limit("API01")
     def api01(self, **params):
         return self._dispatch("API01", services.api01)
 
-    @http.route('/ginlong/sim/api03', type='http', auth='none', methods=['POST'], csrf=False)
+    @http.route(['/ginlong/sim/api03', '/api/ginlong/TPL_Pending_Delivery_Note'], type='http', auth='none', methods=['POST'], csrf=False)
     @validate_token
     @api_logger
     @rate_limit("API03")
@@ -68,14 +72,14 @@ class GinlongSimulationController(http.Controller):
         # API03 remains the local A-003 Solis -> Odoo development assumption.
         return self._dispatch("API03", services.api03)
 
-    @http.route('/ginlong/sim/api05', type='http', auth='none', methods=['POST'], csrf=False)
+    @http.route(['/ginlong/sim/api05', '/api/ginlong/TPL_Stocktake_Order'], type='http', auth='none', methods=['POST'], csrf=False)
     @validate_token
     @api_logger
     @rate_limit("API05")
     def api05(self, **params):
         return self._dispatch("API05", services.api05)
 
-    @http.route('/ginlong/sim/api07', type='http', auth='none', methods=['POST'], csrf=False)
+    @http.route(['/ginlong/sim/api07', '/api/ginlong/TPL_Product_Master'], type='http', auth='none', methods=['POST'], csrf=False)
     @validate_token
     @api_logger
     @rate_limit("API07")

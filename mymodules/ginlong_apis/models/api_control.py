@@ -64,6 +64,11 @@ class ResConfigSettings(models.TransientModel):
         string="Ginlong API07 requests per second", default=100,
         config_parameter="ginlong_apis.api07_rate_limit",
     )
+    ginlong_api02_callback_url = fields.Char(string="API02 回传 URL（含 objectid）", config_parameter="ginlong_apis.api02_callback_url")
+    ginlong_api04_callback_url = fields.Char(string="API04 回传 URL（含 objectid）", config_parameter="ginlong_apis.api04_callback_url")
+    ginlong_api06_callback_url = fields.Char(string="API06 回传 URL（含 objectid）", config_parameter="ginlong_apis.api06_callback_url")
+    ginlong_api08_callback_url = fields.Char(string="API08 回传 URL（含 objectid）", config_parameter="ginlong_apis.api08_callback_url")
+    ginlong_api10_callback_url = fields.Char(string="API10 回传 URL（含 objectid）", config_parameter="ginlong_apis.api10_callback_url")
 
     @api.constrains(
         "ginlong_api01_rate_limit", "ginlong_api03_rate_limit",
@@ -91,3 +96,13 @@ class ResConfigSettings(models.TransientModel):
         except (TypeError, ValueError):
             _logger.error("Invalid Ginlong rate limit configuration for %s; using default", api_code)
             return defaults[api_code]
+
+    @api.model
+    def get_ginlong_callback_endpoint(self, api_code):
+        if api_code not in {"API02", "API04", "API06", "API08", "API10"}:
+            raise ValueError("Unknown Ginlong callback API code: %s" % api_code)
+        params = self.env["ir.config_parameter"].sudo()
+        prefix = "ginlong_apis.%s_callback_" % api_code.lower()
+        return {
+            "url": params.get_param(prefix + "url", "").strip(),
+        }

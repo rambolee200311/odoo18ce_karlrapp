@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_inbound_order_form_ginlong_callbacks" model="ir.ui.view">
+        <field name="name">inbound.order.form.ginlong.callbacks</field>
+        <field name="model">world.depot.inbound.order</field>
+        <field name="inherit_id" ref="worlddepot.view_inbound_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form/header" position="inside">
+                <button name="action_ginlong_api02" type="object" string="回传锦浪：收货确认"/>
+                <button name="action_ginlong_api04" type="object" string="回传锦浪：入库完成"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Ginlong 回传数据" name="ginlong_callback_data">
+                    <group>
+                        <group string="API02 收货确认">
+                            <field name="reference" readonly="1"/>
+                            <field name="state" readonly="1"/>
+                            <field name="status" readonly="1"/>
+                            <div class="o_form_label">Action：UPDATE</div>
+                            <field name="ginlong_receipt_detail_ids">
+                                <list editable="bottom">
+                                    <field name="move_line_id" domain="[('picking_id.inbound_order_id', '=', parent.id)]"/>
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="serial_number" readonly="1"/>
+                                    <field name="quantity" readonly="1"/>
+                                    <field name="package_id" readonly="1"/>
+                                    <field name="receipt_status"/>
+                                </list>
+                            </field>
+                        </group>
+                        <group string="API04 入库完成">
+                            <div class="text-muted">实际作业信息来自关联 stock.picking / stock.move.line。操作人员和逐行操作时间请在对应作业单的 Ginlong 回传数据页补充并保存。</div>
+                            <div class="text-muted">Action：CREATE；发送时读取已保存的实际入库作业行。</div>
+                        </group>
+                    </group>
+                    <field name="ginlong_stock_picking_ids">
+                        <list editable="bottom" open_form_view="1" create="false" delete="false">
+                            <field name="ginlong_callback_selected"/>
+                            <field name="name"/>
+                            <field name="state"/>
+                            <field name="date_done"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_outbound_order_form_ginlong_callbacks" model="ir.ui.view">
+        <field name="name">outbound.order.form.ginlong.callbacks</field>
+        <field name="model">world.depot.outbound.order</field>
+        <field name="inherit_id" ref="worlddepot.view_outbound_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form/header" position="inside">
+                <button name="action_ginlong_api06" type="object" string="回传锦浪：备货完成"/>
+                <button name="action_ginlong_api08" type="object" string="回传锦浪：发货完成"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Ginlong 回传数据" name="ginlong_callback_data">
+                    <group>
+                        <group string="API06 备货完成">
+                            <field name="reference" readonly="1"/>
+                            <field name="state" readonly="1"/>
+                            <field name="status" readonly="1"/>
+                            <field name="picking_PICK" readonly="1"/>
+                            <field name="picking_PICK_date" readonly="1"/>
+                            <field name="ginlong_pallet_qty_auto" readonly="1"/>
+                            <field name="ginlong_pallet_qty_manual_enabled"/>
+                            <field name="ginlong_pallet_qty_manual" invisible="not ginlong_pallet_qty_manual_enabled"/>
+                            <field name="ginlong_pallet_qty" readonly="1"/>
+                            <field name="ginlong_total_net_weight" readonly="1"/>
+                            <field name="ginlong_gross_weight_manual_enabled"/>
+                            <field name="ginlong_gross_weight_manual" invisible="not ginlong_gross_weight_manual_enabled"/>
+                            <field name="ginlong_total_weight" readonly="1"/>
+                            <div class="text-muted">托盘默认按实际备货行的 package_id 去重；重量按产品档案重量乘实际数量，毛重默认等于净重。可启用手工值覆盖。</div>
+                            <div class="text-muted">Action：CREATE；实际操作人员和逐行操作时间在关联作业单的 Ginlong 回传数据页维护。</div>
+                        </group>
+                        <group string="API08 发货完成">
+                            <field name="state" readonly="1"/>
+                            <field name="status" readonly="1"/>
+                            <field name="ginlong_shipment_detail_ids">
+                                <list editable="bottom">
+                                    <field name="move_line_id" domain="[('picking_id.outbound_order_id', '=', parent.id)]"/>
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="serial_number" readonly="1"/>
+                                    <field name="quantity" readonly="1"/>
+                                    <field name="package_id" readonly="1"/>
+                                    <field name="shipment_status"/>
+                                </list>
+                            </field>
+                            <div class="text-muted">Action：CREATE；明细从已关联的实际发货作业行读取。</div>
+                        </group>
+                    </group>
+                    <field name="ginlong_stock_picking_ids">
+                        <list editable="bottom" open_form_view="1" create="false" delete="false">
+                            <field name="ginlong_callback_selected"/>
+                            <field name="name"/>
+                            <field name="state"/>
+                            <field name="date_done"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_stock_picking_form_ginlong_callbacks" model="ir.ui.view">
+        <field name="name">stock.picking.form.ginlong.callbacks</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Ginlong 回传数据" name="ginlong_callback_data"
+                      invisible="not inbound_order_id and not outbound_order_id">
+                    <field name="inbound_order_id" invisible="1"/>
+                    <field name="outbound_order_id" invisible="1"/>
+                    <div class="text-muted">
+                        仅维护 Ginlong 必需且当前作业行缺失的实际操作人员及操作时间；产品、SN、数量和托盘从现有 move line 自动读取。
+                    </div>
+                    <field name="move_line_ids" create="false" delete="false">
+                        <list editable="bottom" create="false" delete="false">
+                            <field name="product_id" readonly="1"/>
+                            <field name="lot_id" readonly="1"/>
+                            <field name="quantity" readonly="1"/>
+                            <field name="package_id" readonly="1"/>
+                            <field name="result_package_id" readonly="1"/>
+                            <field name="ginlong_operator_code"/>
+                            <field name="ginlong_operation_time"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_world_depot_stocktake_order_form_ginlong_callback" model="ir.ui.view">
+        <field name="name">world.depot.stocktake.order.form.ginlong.callback</field>
+        <field name="model">world.depot.stocktake.order</field>
+        <field name="inherit_id" ref="worlddepot.view_world_depot_stocktake_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form/header" position="inside">
+                <button name="action_ginlong_api10" type="object" string="回传锦浪：盘点完成"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Ginlong 回传数据" name="ginlong_callback_data">
+                    <group>
+                        <field name="ginlong_api10_action"/>
+                        <div class="text-muted">Action 匹配忽略大小写；Del 仅发送本页已选择的实盘结果。</div>
+                    </group>
+                    <field name="result_ids" create="false" delete="false">
+                        <list editable="bottom" create="false" delete="false">
+                            <field name="ginlong_callback_selected"/>
+                            <field name="product_code" readonly="1"/>
+                            <field name="product_name" readonly="1"/>
+                            <field name="serial_number" readonly="1"/>
+                            <field name="quantity" readonly="1"/>
+                            <field name="pallet_code" readonly="1"/>
+                            <field name="operator_id" readonly="1"/>
+                            <field name="ginlong_operator_code"/>
+                            <field name="operation_time" readonly="1"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

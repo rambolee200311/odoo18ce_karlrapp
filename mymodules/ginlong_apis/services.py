@@ -1,13 +1,68 @@
 """Small ORM mapping functions for the local Ginlong simulation contract.
 
-These functions deliberately do not define Ginlong's production URL, transport,
-action enums, retry rules, or unit conversions. The four controller routes are
-local simulation entry points until Ginlong supplies the external contract.
+These functions use the provisional Ginlong path/action table supplied by the
+project owner. The action values are normalized case-insensitively before the
+idempotency fingerprint is computed.
 """
 
 import json
 
 from odoo.exceptions import ValidationError
+
+
+_INBOUND_ACTIONS = {
+    "API01": {"add": ("CREATE", "Add"), "del": ("DELETE", "Del")},
+    "API03": {"add": ("CREATE", "Add"), "del": ("DELETE", "Del"), "edit": ("UPDATE", "Edit")},
+    "API05": {"add": ("CREATE", "Add"), "del": ("DELETE", "Del"), "edit": ("UPDATE", "Edit")},
+    "API07": {"add": ("UPSERT", "Add"), "edit": ("UPSERT", "Edit")},
+}
+_LOCAL_ACTIONS = {
+    **_INBOUND_ACTIONS,
+    # API01's previously approved local update behavior remains available to
+    # the legacy simulation route while the supplied external table is pending
+    # Ginlong confirmation and lists only Add/Del for its public route.
+    "API01": {
+        **_INBOUND_ACTIONS["API01"],
+        "edit": ("UPDATE", "Edit"),
+    },
+}
+_LEGACY_ACTIONS = {
+    "create": "add",
+    "delete": "del",
+    "update": "edit",
+}
+
+
+def normalize_inbound_action(api_code, payload, strict=True):
+    """Return a copy with the documented action spelling for stable fingerprints."""
+    actions_by_api = _INBOUND_ACTIONS if strict else _LOCAL_ACTIONS
+    if api_code not in actions_by_api:
+        raise ValidationError("Unsupported Ginlong inbound API: %s" % api_code)
+    _required(payload, ["action"], api_code)
+    raw_action = payload["action"]
+    if not isinstance(raw_action, str):
+        raise ValidationError("%s action must be a string" % api_code)
+    action_key = raw_action.strip().casefold()
+    action_entry = actions_by_api[api_code].get(action_key)
+    if not action_entry and not strict:
+        action_key = _LEGACY_ACTIONS.get(action_key, action_key)
+        action_entry = actions_by_api[api_code].get(action_key)
+    if not action_entry:
+        allowed = ", ".join(action[1] for action in actions_by_api[api_code].values())
+        raise ValidationError("%s action must be one of: %s" % (api_code, allowed))
+    normalized = dict(payload)
+    normalized["action"] = action_entry[1]
+    return normalized
+
+
+def _inbound_action(api_code, payload):
+    normalized = normalize_inbound_action(api_code, payload, strict=False)
+    external_action = normalized["action"]
+    internal_action = next(
+        value[0] for value in _LOCAL_ACTIONS[api_code].values()
+        if value[1] == external_action
+    )
+    return internal_action, external_action
 
 
 def _required(data, names, label):
@@ -29,8 +84,25 @@ def _project(api_user):
     return project
 
 
-def _find_product(env, product_code):
-    products = env["product.product"].sudo().search(
+def _find_product(env, product_code, owner_code=None):
+    """Resolve Ginlong product codes within their owner namespace."""
+    product_model = env["product.product"].sudo()
+    if owner_code:
+        products = product_model.search([
+            ("default_code", "=", product_code),
+            ("ginlong_owner_code", "=", owner_code),
+        ], limit=2)
+        if len(products) == 1:
+            return products
+        if len(products) > 1:
+            raise ValidationError(
+                "Product code %s is ambiguous for Ginlong owner %s" % (product_code, owner_code)
+            )
+        raise ValidationError(
+            "Product code %s was not found for Ginlong owner %s" % (product_code, owner_code)
+        )
+
+    products = product_model.search(
         ["|", ("default_code", "=", product_code), ("barcode", "=", product_code)],
         limit=2,
     )
@@ -52,16 +124,14 @@ def api01(env, api_user, payload):
     """Map API01 to the existing inbound order / pallet / product structure."""
     _required(payload, ["owner", "action", "inboundOrderNo", "warehouse", "businessType"], "API01")
     project = _project(api_user)
-    action = str(payload["action"]).upper()
+    action, external_action = _inbound_action("API01", payload)
     order_model = env["world.depot.inbound.order"]
 
     if action == "DELETE":
         order = _find_one_by_reference(order_model, project, payload["inboundOrderNo"], "Inbound order")
         if order.state != "cancel":
             order.write({"state": "cancel"})
-        return {"success": True, "data": {"action": action, "inboundOrderNo": payload["inboundOrderNo"]}}
-    if action not in ("CREATE", "UPDATE"):
-        raise ValidationError("API01 local simulation action must be CREATE, UPDATE, or DELETE")
+        return {"success": True, "data": {"action": external_action, "inboundOrderNo": payload["inboundOrderNo"]}}
 
     order = False
     if action == "UPDATE":
@@ -81,7 +151,7 @@ def api01(env, api_user, payload):
         product_name = detail.get("productName") or detail.get("name")
         if not product_name:
             raise ValidationError("API01 details[%s] missing required field(s): productName/name" % index)
-        product = _find_product(env, detail["productCode"])
+        product = _find_product(env, detail["productCode"], payload["owner"])
         quantity = _number(detail["quantity"], "API01 details[%s].quantity" % index)
         nested_product = {
             "product_id": product.id,
@@ -151,16 +221,14 @@ def api03(env, api_user, payload):
     """Map the A-003 local assumption to the existing outbound order model."""
     _required(payload, ["owner", "action", "outboundOrderNo", "warehouse", "businessType"], "API03")
     project = _project(api_user)
-    action = str(payload["action"]).upper()
+    action, external_action = _inbound_action("API03", payload)
     order_model = env["world.depot.outbound.order"]
 
     if action == "DELETE":
         order = _find_one_by_reference(order_model, project, payload["outboundOrderNo"], "Outbound order")
         if order.state != "cancel":
             order.write({"state": "cancel"})
-        return {"success": True, "data": {"action": action, "outboundOrderNo": payload["outboundOrderNo"]}}
-    if action not in ("CREATE", "UPDATE"):
-        raise ValidationError("API03 local simulation action must be CREATE, UPDATE, or DELETE")
+        return {"success": True, "data": {"action": external_action, "outboundOrderNo": payload["outboundOrderNo"]}}
 
     order = False
     if action == "UPDATE":
@@ -201,7 +269,7 @@ def api03(env, api_user, payload):
         if not isinstance(detail, dict):
             raise ValidationError("API03 details[%s] must be an object" % index)
         _required(detail, line_required, "API03 details[%s]" % index)
-        product = _find_product(env, detail["productCode"])
+        product = _find_product(env, detail["productCode"], payload["owner"])
         values = {
             "product_id": product.id,
             "quantity": _number(detail["quantity"], "API03 details[%s].quantity" % index),
@@ -247,11 +315,11 @@ def api03(env, api_user, payload):
 
 
 def api05(env, api_user, payload):
-    """Store a standalone stocktake task; this function never accesses stock models."""
+    """Store the customer stocktake instruction in WorldDepot; never touch stock."""
     _required(payload, ["owner", "action", "countOrderNo", "warehouse"], "API05")
     project = _project(api_user)
-    action = str(payload["action"]).upper()
-    task_model = env["ginlong.stocktake.task"].sudo()
+    action, external_action = _inbound_action("API05", payload)
+    task_model = env["world.depot.stocktake.order"].sudo()
 
     if action == "DELETE":
         tasks = task_model.search([
@@ -263,9 +331,7 @@ def api05(env, api_user, payload):
             raise ValidationError("Stocktake task %s is %s in this WMS project" % (payload["countOrderNo"], reason))
         if tasks.state != "cancel":
             tasks.write({"state": "cancel"})
-        return {"success": True, "data": {"action": action, "countOrderNo": payload["countOrderNo"]}}
-    if action not in ("CREATE", "UPDATE"):
-        raise ValidationError("API05 local simulation action must be CREATE, UPDATE, or DELETE")
+        return {"success": True, "data": {"action": external_action, "countOrderNo": payload["countOrderNo"]}}
 
     details = payload.get("details")
     sn_list = payload.get("snList")
@@ -288,17 +354,11 @@ def api05(env, api_user, payload):
         details = None
     if sn_list is not None and not isinstance(sn_list, list):
         raise ValidationError("API05 snList must be a list")
-    line_values = []
     for index, detail in enumerate(details or []):
         if not isinstance(detail, dict):
             raise ValidationError("API05 details[%s] must be an object" % index)
         _required(detail, ["productCode", "productName", "specificationModel", "quantity"], "API05 details[%s]" % index)
-        line_values.append((0, 0, {
-            "product_code": detail["productCode"],
-            "product_name": detail["productName"],
-            "specification_model": detail["specificationModel"],
-            "quantity": _number(detail["quantity"], "API05 details[%s].quantity" % index),
-        }))
+        _number(detail["quantity"], "API05 details[%s].quantity" % index)
     for index, serial in enumerate(sn_list or []):
         if not isinstance(serial, dict):
             raise ValidationError("API05 snList[%s] must be an object" % index)
@@ -313,11 +373,10 @@ def api05(env, api_user, payload):
         "remark": payload.get("remark") or False,
     }
     if details is not None:
-        task_values["line_ids"] = [(5, 0, 0)] + line_values
+        task_values["plan_details_json"] = json.dumps(details, ensure_ascii=False)
     if sn_list is not None or action == "CREATE":
-        task_values["sn_list_json"] = json.dumps(sn_list or [], ensure_ascii=False)
+        task_values["plan_sn_list_json"] = json.dumps(sn_list or [], ensure_ascii=False)
     if action == "CREATE":
-        task_values["line_ids"] = line_values
         task = task_model.create(task_values)
     else:
         task.write(task_values)
@@ -326,7 +385,8 @@ def api05(env, api_user, payload):
 
 def api07(env, api_user, payload):
     """Upsert product fields on native Odoo product models."""
-    _required(payload, ["owner", "productCode", "productName", "specificationModel", "unit", "productForm"], "API07")
+    _required(payload, ["action", "owner", "productCode", "productName", "specificationModel", "unit", "productForm"], "API07")
+    _inbound_action("API07", payload)
     _project(api_user)
     code = payload["productCode"]
     products = env["product.product"].sudo().search([
@@ -335,13 +395,6 @@ def api07(env, api_user, payload):
     ], limit=2)
     if len(products) > 1:
         raise ValidationError("Owner/product key %s/%s is ambiguous in the existing WMS product data" % (payload["owner"], code))
-    if not products:
-        conflicting = env["product.product"].sudo().search([("default_code", "=", code)], limit=1)
-        if conflicting:
-            raise ValidationError(
-                "Product code %s already belongs to a different Ginlong owner; the existing WMS product code cannot be reassigned implicitly" % code
-            )
-
     units = env["uom.uom"].sudo().search([("name", "=", payload["unit"])], limit=2)
     if len(units) != 1:
         reason = "not found" if not units else "ambiguous"

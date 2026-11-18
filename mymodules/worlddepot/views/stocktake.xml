@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_world_depot_stocktake_order_list" model="ir.ui.view">
+        <field name="name">world.depot.stocktake.order.list</field>
+        <field name="model">world.depot.stocktake.order</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="count_order_no"/>
+                <field name="project_id"/>
+                <field name="owner_code"/>
+                <field name="warehouse_code"/>
+                <field name="state"/>
+            </list>
+        </field>
+    </record>
+    <record id="view_world_depot_stocktake_order_form" model="ir.ui.view">
+        <field name="name">world.depot.stocktake.order.form</field>
+        <field name="model">world.depot.stocktake.order</field>
+        <field name="arch" type="xml">
+            <form string="Customer Stocktake Order">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="new,cancel"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box"/>
+                    <div class="oe_title">
+                        <h1><field name="count_order_no"/></h1>
+                    </div>
+                    <group>
+                        <field name="project_id"/>
+                        <field name="owner_code"/>
+                        <field name="warehouse_code"/>
+                        <field name="remark"/>
+                    </group>
+                    <notebook>
+                        <page string="Planned Scope">
+                            <field name="plan_details_json" invisible="1"/>
+                            <field name="plan_sn_list_json" invisible="1"/>
+                            <div class="text-muted">计划范围由客户盘点订单保存；实际采集值请录入“实盘结果”，不得以计划数代替实盘结果。</div>
+                        </page>
+                        <page string="Actual Results">
+                            <field name="result_ids">
+                                <list editable="bottom">
+                                    <field name="product_id"/>
+                                    <field name="product_code"/>
+                                    <field name="product_name"/>
+                                    <field name="specification_model"/>
+                                    <field name="serial_number"/>
+                                    <field name="quantity"/>
+                                    <field name="pallet_code"/>
+                                    <field name="operator_id"/>
+                                    <field name="operation_time"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_world_depot_stocktake_order" model="ir.actions.act_window">
+        <field name="name">Customer Stocktake Orders</field>
+        <field name="res_model">world.depot.stocktake.order</field>
+        <field name="view_mode">list,form</field>
+    </record>
+    <menuitem id="world_depot_stocktake_menu" name="Stocktake" parent="world_depot_logi_menu" sequence="350"/>
+    <menuitem id="world_depot_stocktake_order_menu" name="Customer Orders" parent="world_depot_stocktake_menu" action="action_world_depot_stocktake_order" sequence="10"/>
+</odoo>

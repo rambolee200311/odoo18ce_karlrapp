@@ -5,6 +5,7 @@ from odoo.exceptions import UserError
 from ..validator_token import validate_token
 from odoo.http import request, Response
 from ..api_logs import api_logger
+from .product_lookup import resolve_product
 
 _logger = logging.getLogger(__name__)
 
@@ -31,10 +32,7 @@ class InboundOrderAPIOFO(http.Controller):
                 for field in mandatory_fields:
                     if field not in product:
                         return {'error': f'Missing mandatory field in product: {field}'}
-                    odoo_product = request.env['product.product'].sudo().search(
-                        ['|', ('barcode', '=', product['product_id'])
-                            , ('default_code', '=', product['product_id'])],
-                        limit=1)
+                    odoo_product = resolve_product(product['product_id'])
                     if not odoo_product:
                         return {'success': False, 'error': f'Product not found: {product["product_id"]}'}
 
@@ -73,10 +71,7 @@ class InboundOrderAPIOFO(http.Controller):
                     'pallets': 1,
                     'inbound_order_product_pallet_ids': [],
                 }
-                odoo_product = request.env['product.product'].sudo().search(
-                    ['|', ('barcode', '=', product['product_id'])
-                        , ('default_code', '=', product['product_id'])],
-                    limit=1)
+                odoo_product = resolve_product(product['product_id'])
                 product_vals = {
                     'product_id': odoo_product.id,
                     'quantity': product['quantity'],

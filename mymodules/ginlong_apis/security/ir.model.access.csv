@@ -1,7 +1,5 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_ginlong_stocktake_task_user,ginlong.stocktake.task user,model_ginlong_stocktake_task,stock.group_stock_user,1,1,1,1
-access_ginlong_stocktake_task_manager,ginlong.stocktake.task manager,model_ginlong_stocktake_task,stock.group_stock_manager,1,1,1,1
-access_ginlong_stocktake_task_line_user,ginlong.stocktake.task.line user,model_ginlong_stocktake_task_line,stock.group_stock_user,1,1,1,1
-access_ginlong_stocktake_task_line_manager,ginlong.stocktake.task.line manager,model_ginlong_stocktake_task_line,stock.group_stock_manager,1,1,1,1
 access_ginlong_api_idempotency_deny,ginlong.api.idempotency private,model_ginlong_api_idempotency,base.group_user,0,0,0,0
 access_ginlong_api_rate_counter_deny,ginlong.api.rate.counter private,model_ginlong_api_rate_counter,base.group_user,0,0,0,0
+access_ginlong_inbound_receipt_detail_stock_user,ginlong.inbound.receipt.detail stock user,model_ginlong_inbound_receipt_detail,stock.group_stock_user,1,1,1,1
+access_ginlong_outbound_shipment_detail_stock_user,ginlong.outbound.shipment.detail stock user,model_ginlong_outbound_shipment_detail,stock.group_stock_user,1,1,1,1
