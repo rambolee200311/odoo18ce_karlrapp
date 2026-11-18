@@ -1,5 +1,12 @@
 # 实施历史记录：IHR-GIN-004
 
+| 字段 | 值 |
+|---|---|
+| IHR 版本 | v1.0 |
+| 冻结实施基线 | [CC-GIN-004 v1.0](CC-GIN-004-v1.0.md)；[TDD v0.9](../ginlong_apis/TDD-v0.9.md)；Plan v1.6 范围基线 |
+| 当前状态 | CC-GIN-004 Closed；[关闭记录](CC-GIN-004-v1.1.md)；[FR-GIN-004 v1.0](FR-GIN-004.md) |
+| 最终代码基线 | `3a7ec9c2de954cd1c88fd6c3d598c75b167ad4fe` |
+
 ## 0. 文档治理
 
 本记录追溯 [CC-GIN-004 v1.0 Frozen](CC-GIN-004-v1.0.md) 的本地实施。上游冻结文件不被覆盖；测试证据及历史失败见 [ATR-GIN-004](ATR-GIN-004.md)。
@@ -38,7 +45,7 @@
 
 ## IHR-005 — 评审状态与后续承接
 
-- **结果：** CC-TEST-025–040 的本地自动化/组件验证均达到冻结要求；API09 库存数据覆盖明确为模拟 ORM 数据。CC-GIN-004 实施结果提交 Human Review；本记录不代替 Human Review，不生成关闭 FR，也不自行把 CC 标记 Closed。
+- **结果（当时记录）：** CC-TEST-025–040 的本地自动化/组件验证均达到冻结要求；API09 库存数据覆盖明确为模拟 ORM 数据。该条记录提交评审时尚未生成关闭 FR；最终关闭决定及状态见 IHR-008。
 - **Open / Not Run：** 模板同步因模板源缺失保持 BLOCKED，沿用批准的流程例外；真实 Ginlong 和生产访问未执行；完整浏览器 UI/WMS 人工 E2E 未执行；真实 KR 库存同步未验证。
 - **后续 CC：** CC-GIN-005 承接完整本地 UI/WMS 集成与人工 E2E；CC-GIN-006 在另行授权后承接真实 Ginlong 环境联调。
 
@@ -53,12 +60,31 @@
 - **限制/Open Item：** 本地仓库编码是 5 字符短码，Ginlong warehouse 字段允许 40 字符。自动化证明短码完全匹配时的仓库隔离；未证明任意 Ginlong 码可与本地短码对应。需要确认实际对端仓库码与现有短码相同且满足长度，或批准在现有仓库模型增加可保存 Ginlong 编码的字段，之后再验证相应输入。
 - **Result：** 新增 12 类本地隔离自动化通过；不据此将 Ginlong 外部仓库编码兼容或 CC-GIN-004 正式关闭标为 PASS。
 
+## IHR-008 — 项目负责人补充决策及 CC-GIN-004 关闭
+
+- **阶段：** Project Owner decision / closure
+- **授权：** 项目负责人于 2026-11-18 明确授权关闭 CC-GIN-004 并提交、推送 Git；此前明确要求货主编码使用 `res.partner.ginlong_owner_code` 并经 `stock.quant.owner_id` 隔离库存，单仓库不建编码映射，未来多仓按 Ginlong 要求扩展现有仓库模型。
+- **数据来源决议：** API09 owner 由 `res.partner.ginlong_owner_code` 定位，并以其 ID 限定 `stock.quant.owner_id`；未知 owner 返回空清单。warehouse 按现有 `stock.warehouse.code` 精确匹配；未知 warehouse 报错，不回退到唯一仓库。CC-TEST-041–043 对未知仓库、未知货主及双货主×双仓矩阵均有 PASS 证据。TDD v0.9 记录这一后续明确的技术数据来源，v0.8 保留为历史冻结版本。
+- **最终证据：** CC-TEST-025–040 均 PASS；用户追加的 CC-TEST-041–043 也 PASS。ATR-GIN-004 RUN-010 记录 37 个 Ginlong post-tests、0 failed/0 error；最终代码基线的完整 Ginlong 套件见 ATR-GIN-003 RUN-055，共 40 个 post-tests、0 failed/0 error；`worlddepot` 受影响回归为 8 个 post-tests、0 failed/0 error。Odoo Shell ORM 核验模块 `18.0.2.0.9`、字段及权限已注册；语法、XML 和 `git diff --check` 通过。
+- **实施基线：** `3a7ec9c2de954cd1c88fd6c3d598c75b167ad4fe`。最终 FR 和 CC 关闭状态记录随后的文档提交，不改变被测代码。
+- **保留项：** 模板同步仍 BLOCKED，按既有用户批准例外保留，不记 PASS；浏览器 UI/WMS 人工 E2E 交 CC-GIN-005；真实 Ginlong、生产及 Karl Rapp 库存同步未执行，交 CC-GIN-006/后续集成确认。当前 `stock.warehouse.code` 是 5 字符短码，自动化只证明本地匹配与未知码隔离，不宣称任意 Ginlong 仓库码已联调兼容。
+- **结果：** 用户授权 CC-GIN-004 Closed；FR-GIN-004 v1.0 Closure SATISFIED，Human Review APPROVED。CC-GIN-004 v1.0 冻结验收基线保留，v1.1 只记录补充决定及关闭状态。
+
+## IHR 版本记录
+
+| 版本 | 日期 | 说明 | 状态 |
+|---|---|---|---|
+| v0.1 | 2026-11-18 | 建立 CC-GIN-004 实施历史和运行证据 | Ready for Human Review |
+| v0.2 | 2026-11-18 | 追加货主/仓库隔离测试及 API01/03 项目认知记录 | Ready for Human Review |
+| v1.0 | 2026-11-18 | 追加项目负责人数据来源决议及正式关闭证据；保留模板、E2E 和真实联调未完成状态 | Closed |
+
 ## IHR-007 — API01/API03 货主与产品处理规则登记
 
 - **阶段：** Project cognition update / future scope trace
 - **来源：** 用户确认 API01 入库单按 owner code 查找 `res.partner.ginlong_owner_code`，有则复用、无则创建并关联入库单；API03 出库单必须先找到货主，并逐行按 `owner + productCode` 找现有产品，缺失则拒绝并记录业务错误，不自动创建产品，产品资料由 API07 维护。
 - **Action：** 更新 [PROJECT_COGNITION.md v2.8](../context/cognition/PROJECT_COGNITION.md)。本次 CC-GIN-004 只覆盖 API09 和管理界面，没有修改 API01/API03 代码；相关实施需纳入后续获批 CC。
 - **Result：** 已作为项目认知保存；CC-GIN-004 测试范围不扩大。
+- **后续记录：** 上述内容是当时状态。API01/API03 随后经项目负责人单独授权实施，见 [IHR-GIN-003 IHR-021](IHR-GIN-003.md)；这部分不计入 CC-GIN-004 的关闭义务。
 
 ## 实际变更清单
 
