@@ -7,7 +7,9 @@ idempotency fingerprint is computed.
 
 import json
 
+from odoo import fields
 from odoo.exceptions import ValidationError
+from odoo.tools.float_utils import float_round
 
 
 _INBOUND_ACTIONS = {
@@ -82,6 +84,37 @@ def _project(api_user):
     if not project:
         raise ValidationError("The authenticated API user has no WMS project")
     return project
+
+
+def _resolve_ginlong_owner(env, owner_code, create=False):
+    """Resolve Ginlong's owner code to one existing res.partner record."""
+    if not isinstance(owner_code, str) or not owner_code.strip():
+        raise ValidationError("Ginlong owner must be a non-empty owner code")
+    partner_model = env["res.partner"].sudo().with_context(active_test=False)
+    owners = partner_model.search([("ginlong_owner_code", "=", owner_code)], limit=2)
+    if len(owners) > 1:
+        raise ValidationError("Ginlong owner code %s is ambiguous" % owner_code)
+    if owners:
+        return owners
+    if not create:
+        raise ValidationError("Ginlong owner code %s was not found" % owner_code)
+
+    # The inbound payload supplies a code but no owner name, so use the code
+    # as the partner's display name. The SQL unique constraint prevents
+    # concurrent requests for different orders from creating duplicate owners.
+    try:
+        with env.cr.savepoint():
+            return partner_model.create({
+                "name": owner_code,
+                "ginlong_owner_code": owner_code,
+            })
+    except Exception:
+        # Another transaction may have created this code after our first
+        # search. Reuse it if the unique constraint resolved that race.
+        owners = partner_model.search([("ginlong_owner_code", "=", owner_code)], limit=2)
+        if len(owners) == 1:
+            return owners
+        raise
 
 
 def _find_product(env, product_code, owner_code=None):
@@ -197,6 +230,7 @@ def api01(env, api_user, payload):
 
     order_values = {
         "project": project.id,
+        "ginlong_owner_id": _resolve_ginlong_owner(env, payload["owner"], create=True).id,
         "warehouse": project.warehouse.id if project.warehouse else False,
         "pick_type": project.inbound_pick_type.id if project.inbound_pick_type else False,
         "reference": payload["inboundOrderNo"],
@@ -233,12 +267,26 @@ def api03(env, api_user, payload):
     order = False
     if action == "UPDATE":
         order = _find_one_by_reference(order_model, project, payload["outboundOrderNo"], "Outbound order")
+    owner = _resolve_ginlong_owner(env, payload["owner"])
     details = payload.get("details")
     if action == "CREATE" or "details" in payload:
         if not isinstance(details, list) or not details:
             raise ValidationError("API03 details must contain at least one product row")
     else:
         details = None
+    if action == "UPDATE" and details is None:
+        # A header-only edit must not change the order owner while leaving
+        # saved detail products under a different owner namespace.
+        for existing_line in order.outbound_order_product_ids:
+            existing_product = existing_line.product_id
+            matched_product = _find_product(
+                env, existing_product.default_code, payload["owner"],
+            )
+            if matched_product != existing_product:
+                raise ValidationError(
+                    "Existing product %s on outbound order %s does not match Ginlong owner %s"
+                    % (existing_product.default_code, payload["outboundOrderNo"], payload["owner"])
+                )
     customer_name = payload.get("customer")
     if action == "CREATE" and not customer_name:
         raise ValidationError("The existing WMS outbound order requires a customer/recipient")
@@ -286,6 +334,7 @@ def api03(env, api_user, payload):
 
     order_values = {
         "project": project.id,
+        "ginlong_owner_id": owner.id,
         "warehouse": project.warehouse.id if project.warehouse else False,
         "pick_type": project.outbound_pick_type.id if project.outbound_pick_type else False,
         "reference": payload["outboundOrderNo"],
@@ -434,3 +483,66 @@ def api07(env, api_user, payload):
             values[target_name] = _number(payload[source_name], "API07.%s" % source_name) if source_name in {"weight", "length", "width", "height"} else payload[source_name]
     product.write(values)
     return {"success": True, "data": {"id": product.id, "productCode": product.default_code}}
+
+
+def api09(env, payload):
+    """Return the current physical inventory for the requested Odoo warehouse.
+
+    Ginlong warehouse codes directly identify ``stock.warehouse.code``; no
+    separate mapping model or name-based lookup is used. The owner code first
+    resolves to ``res.partner.ginlong_owner_code`` and stock is isolated by
+    ``stock.quant.owner_id``.
+    """
+    _required(payload, ["owner", "warehouse"], "API09")
+    for field_name in ("owner", "warehouse"):
+        value = payload[field_name]
+        if not isinstance(value, str) or len(value) > 40:
+            raise ValidationError("API09 %s must be a string of at most 40 characters" % field_name)
+
+    warehouses = env["stock.warehouse"].sudo().with_context(active_test=False).search(
+        [("code", "=", payload["warehouse"])], limit=2
+    )
+    if len(warehouses) != 1:
+        raise ValidationError(
+            "API09 warehouse code must match exactly one configured Odoo warehouse"
+        )
+    warehouse = warehouses
+    owners = env["res.partner"].sudo().with_context(active_test=False).search(
+        [("ginlong_owner_code", "=", payload["owner"])], limit=2
+    )
+    if len(owners) > 1:
+        raise ValidationError("API09 owner code must match exactly one configured owner")
+    if not owners:
+        return {
+            "returnStatus": "Y",
+            "exceptionInfo": "OK",
+            "operationTime": fields.Datetime.to_string(fields.Datetime.now()),
+            "owner": payload["owner"],
+            "warehouse": payload["warehouse"],
+            "inventoryList": [],
+        }
+
+    quant_model = env["stock.quant"].sudo()
+    domain = [
+        ("location_id", "child_of", warehouse.view_location_id.id),
+        ("location_id.usage", "=", "internal"),
+        ("owner_id", "=", owners.id),
+        ("product_id.default_code", "!=", False),
+    ]
+    grouped = quant_model._read_group(domain, ["product_id"], ["quantity:sum"])
+    inventory = [
+        {
+            "productCode": product.default_code,
+            "quantity": float_round(quantity, precision_digits=6),
+        }
+        for product, quantity in grouped
+    ]
+    inventory.sort(key=lambda row: row["productCode"])
+    return {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": fields.Datetime.to_string(fields.Datetime.now()),
+        "owner": payload["owner"],
+        "warehouse": payload["warehouse"],
+        "inventoryList": inventory,
+    }

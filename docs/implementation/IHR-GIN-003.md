@@ -5,14 +5,14 @@
 | 字段 | 值 |
 |---|---|
 | CC | [CC-GIN-003 v1.4 最终规则实施与验证增补](CC-GIN-003-v1.4.md)；v1.1 冻结基线及 v1.2/v1.3 历史保留 |
-| IHR 版本 | v1.2 |
+| IHR 版本 | v1.3 |
 | TDD 基线 | [TDD v0.7 实施验证修订](../ginlong_apis/TDD-v0.7.md)；v0.4–v0.6 历史保留 |
-| 模块 | `ginlong_apis`、`worlddepot` 盘点业务模型与回传界面 |
-| 工作类型 | API 幂等/限流、持久化手动回传 Form、盘点双模型及定向自动化测试 |
+| 模块 | `ginlong_apis`、`worlddepot` 盘点业务模型与回传界面；API01/03 货主处理补充 |
+| 工作类型 | API 幂等/限流、持久化手动回传 Form、盘点双模型、API01/03 货主/产品键映射及自动化测试 |
 | 实施负责人 | Codex |
 | 开始 / 最后更新 | 2026-11-17 / 2026-11-18 |
-| 最新 addon 基线 | ginlong_apis 18.0.2.0.6；ATR-RUN-041–048 记录本轮最终规则、全量 Odoo 自动化及 ORM registry 核验 |
-| 当前实施状态 | CC-GIN-003 已 Closed；FR-GIN-003 v1.0 Closure SATISFIED、Human Review APPROVED；五个人工回传使用标准 Form/Notebook，无回传 Wizard |
+| 最新 addon 基线 | ginlong_apis 18.0.2.0.9；ATR-RUN-049–055 记录关闭后的项目负责人决策补充实施与回归 |
+| 当前实施状态 | CC-GIN-003 历史关闭状态不变；按项目负责人授权追加 API01/03 实施补充，详见 IHR-021；五个人工回传使用标准 Form/Notebook，无回传 Wizard |
 | 模板同步 | BLOCKED：项目模板来源缺失；沿用已批准例外，不记为通过 |
 
 ## 1. CC 基线
@@ -253,6 +253,17 @@
 - Open Items：Ginlong 真实联调、外部撤销/部分执行语义、完整浏览器/WMS 人工 E2E、项目货主解绑与托盘生命周期后续工作继续按 ATR/实施计划记录；模板同步仍 BLOCKED，沿用已批准例外，均未伪记为 PASS。
 - Result：CC-GIN-003 Closed；项目级其他阶段不因此视为完成。
 
+### IHR-021 — 项目负责人决策：API01/03 货主编码处理
+
+- 阶段：项目负责人决策后的实施补充（CC-GIN-003 关闭后；不重开或改写已关闭 CC/FR）
+- 决策来源：项目负责人授权修改 API01/03 代码，并要求在 IHR/ATR 中标记为项目负责人决策。
+- 决策内容：API01 按 `owner` 编码查询 `res.partner.ginlong_owner_code`；存在则复用，不存在则创建并关联入库单，后续相同编码复用同一档案。API03 必须先找到已建货主，再逐行以 `owner + productCode` 定位现有产品；表头更新未带明细时也核验已保存产品行，避免货主改变而旧明细留在其他货主下。任一货主或产品组合不存在时拒绝订单并记录失败日志，不自动创建产品。API07 继续负责产品档案。
+- Action：在现有 `res.partner`、入库单和出库单上增加必要关系/唯一约束；Ginlong 货主关联存入现有订单上的 `ginlong_owner_id`，保留 WorldDepot 原有 `owner` 项目关联字段以避免改变非 Ginlong WMS 行为；API01 实现编码查找或创建，API03 实现已存在货主和产品复合键校验；在现有 Ginlong 订单页显示货主关联；API03 业务校验失败返回 JSON 业务错误并由现有 API 日志记为失败。
+- Files / Components：`mymodules/ginlong_apis/models/wms_extensions.py`、`services.py`、`controllers/ginlong_controller.py`、`views/ginlong_callback_views.xml`、`tests/test_ginlong_api.py`、addon manifest。
+- Preservation：未修改 Ginlong owner/product 映射模型或 WMS 的原生 `default_code` 唯一性规则；未创建产品；未访问真实 Ginlong；未修改 WorldDepot 原有项目货主关联逻辑；Ginlong owner 另存于订单直接 Many2one 关联。
+- Evidence：ATR-RUN-049 首次针对性运行 6 个 post-tests、1 failed（测试在验证重复编码歧义后未恢复测试货主编码；实现相关其余用例通过，失败保留）；ATR-RUN-050 修正夹具后 6 项通过；ATR-RUN-051 API03 业务错误/失败日志定向 7 项通过；ATR-RUN-052 Ginlong 全量 40 个 post-tests、0 failed / 0 error；ATR-RUN-053 ORM registry 核验模块 `installed 18.0.2.0.9`、两个订单关系字段均为指向 `res.partner` 的 Many2one、partner owner-code 唯一约束已注册；ATR-RUN-054 表头更新货主一致性定向 4 项通过；ATR-RUN-055 最终全量 Ginlong 40 个 post-tests、0 failed / 0 error。所有 Odoo 数据核验均使用 Shell ORM。
+- Status：已实施并通过本地 Odoo 自动化；这是项目负责人批准的关闭后补充，不改变 CC-GIN-003/FR-GIN-003 历史关闭结论。
+
 ## 4. 实际变更清单（当前快照）
 
 | 文件 / 组件 | 当前变更 | 追溯 |
@@ -269,6 +280,7 @@
 | `mymodules/worlddepot/models/stocktake.py`、相关 ACL/view/import/manifest/tests | 客户盘点订单与仓库实盘结果双模型；API05/10 复用，移除 Ginlong 平行模型 | CC-TEST-005、022、024 |
 | `mymodules/worlddepot/controllers/hoymiles/product_lookup.py` 及 5 个 Hoymiles/OFoundation Controller | 共享产品编码 resolver；重复编码按项目 owner 消歧或报告歧义；不任意选择第一条 | CC-TEST-023/024 |
 | `mymodules/ginlong_apis/models/wms_extensions.py`、`models/ginlong_callbacks.py`、API 回传视图及测试 | API02/08 持久化实际明细与状态；API06 实际 package 去重、Ginlong 产品重量、JSON string 和可保存覆盖；混合状态阻止；失败重试追加日志 | CC-TEST-001–007、023/024 |
+| `mymodules/ginlong_apis/models/wms_extensions.py`、`services.py`、`controllers/ginlong_controller.py`、Ginlong 订单页及测试 | 项目负责人授权的 API01 按 `ginlong_owner_code` 复用/创建货主并关联订单；API03 验证已有货主和 `owner + productCode`，包括不带明细的货主表头更新，不创建产品，拒绝时记失败日志；货主编码 ORM 唯一约束 | IHR-021；ATR-RUN-049–055（关闭后补充，不改变 CC/FR 基线） |
 
 ## 5. 偏离与停止记录
 
@@ -299,3 +311,4 @@ CC-GIN-003 已按 Human Review APPROVED 正式关闭。五个人工回传继续�
 | v1.0 | 2026-11-18 | 追加 IHR-018：纳入 API07 owner+productCode 和现有 WMS resolver、API02/08 持久化实际明细及混合状态阻止、API06 JSON string/重量/手工覆盖；记录 ATR-RUN-041–048、ORM registry 及关闭验收评估 | Ready for Human Review |
 | v1.1 | 2026-11-18 | 追加 IHR-019：根据后续 Ginlong 接口矩阵确认 API03 Ginlong→Odoo，保留早期 A-003 作为历史假设；真实联调仍未执行 | Ready for Human Review |
 | v1.2 | 2026-11-18 | 追加 IHR-020：记录 Human Review APPROVED、FR-GIN-003 v1.0 及 CC-GIN-003 Closed；保留未执行的外部/人工场景和模板同步 BLOCKED 事实 | Closed |
+| v1.3 | 2026-11-18 | 追加项目负责人授权的 API01/03 货主处理补充实施；记录首次失败、修正后定向和全量 Odoo 测试、ORM 核验；不重开或改写 CC-GIN-003/FR-GIN-003 | Closed baseline + approved post-closure supplement |

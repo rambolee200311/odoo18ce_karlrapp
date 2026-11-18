@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 版本 | v2.0 |
+| 版本 | v2.9 |
 | 日期 | 2026-11-18 |
 | 状态 | 项目用户确认的架构认知 |
 | 适用范围 | `ginlong_apis`、`karlrapp_gateway`、现有 Odoo WMS 及三系统集成开发 |
@@ -83,6 +83,8 @@ Ginlong (Solis)
 ### 3.3 库存以实际执行为准
 
 只有 Karl Rapp 返回的实际执行结果进入 Odoo 后，Odoo 才能按现有业务流程处理相应 `stock.picking` 和库存移动。不得仅凭 Ginlong 的指令创建库存结果，不得在 `ginlong_apis` 或 Gateway 中复制库存计算/扣增逻辑。
+
+`ginlong_apis` 不独立执行或处理仓库收货、发货。实际出入库作业数据来自 Karl Rapp；Odoo 依据返回结果使用 `stock.picking` 和原生库存机制记录实际移动。Ginlong API09 返回 Odoo 当前的**实际物理在库数量**，按 `(ownerCode, warehouse, productCode)` 区分；使用 Odoo 当前实存量，不以 `quantity - reserved_quantity` 计算可用量，也不以 Ginlong 指令数量或计划数量推算库存。
 
 ### 3.4 分批及重复数据
 
@@ -177,6 +179,20 @@ Ginlong 入站 API 按 API 和已认证调用方分别限流，四个 API 独立
 
 Ginlong 入站 UPDATE 复用对应现有 WMS 业务模型的修改逻辑；`audit_log` 现有字段变更跟踪继续按其配置工作，本项目不为此另建跟踪机制。订单类 DELETE（API01/03/05）只把对应订单状态置为 `cancel`，不物理删除订单或相关原始业务数据；重复删除已取消订单应幂等成功。API07 是产品档案接口，不套用订单取消规则；其 DELETE 行为须以 Ginlong 已确认契约为依据，当前不推定物理删除或停用。
 
+#### 货主编码、产品编码与库存识别
+
+- Ginlong 传输的货主标识是**货主编码**，不是货主名称。接口映射、检索和库存归属均使用编码，不以伙伴显示名称或其他可变名称代替。
+- Ginlong 推送的入库单和出库单均为**单货主单据**。订单级 `ownerCode` 适用于该单据的全部产品明细；一张单据不混合多个货主。
+- 不同货主可以拥有相同 `productCode`。Ginlong 产品身份键为 `(ownerCode, productCode)`；`productCode` 单字段不能唯一识别 Ginlong 产品，也不得据此跨货主合并产品或库存。
+- API01 入库订单收到 owner 编码后，按 `res.partner.ginlong_owner_code` 查找货主；存在则复用，不存在则创建货主档案，并关联到入库订单；后续相同编码复用同一档案。
+- API03 出库订单必须先以表头 owner 编码找到已有货主，再逐行以 `owner + productCode` 查找现有产品。货主或产品组合不存在时拒绝订单并记录业务错误；API03 不自动创建产品，产品档案由 API07 维护。
+- 产品身份按 `(ownerCode, productCode)` 区分；实际库存按 `(ownerCode, warehouseCode, productCode)` 区分。API09 查询指定货主与仓库的库存，再按产品编码返回；相同产品编码在不同货主或仓库下必须分别归属和计算，不得合并。
+- Ginlong 产品身份仍按 `product.product.ginlong_owner_code + default_code` 区分。API09 的库存货主归属则使用 `owner` 查找 `res.partner.ginlong_owner_code`，再按 `stock.quant.owner_id` 隔离库存；不以 Contact Name 或产品编码单字段代替货主，也不新增货主映射模型。
+- API09 的仓库请求值是编码，不能以 `stock.warehouse.name` 显示名称匹配。现有 `stock.warehouse.code` 是短码字段（长度 5）；实现按其精确匹配，未知编码拒绝查询，不把任意编码映射到唯一仓库。Ginlong 的 `warehouse` 字段允许 40 字符，外部编码与 Odoo 短码是否相同尚无确认；在确认/所需字段调整前，不能声称已兼容任意 Ginlong 仓库编码。无需另建映射表。
+- API09 按匹配的仓库内部库位及 `stock.quant.owner_id` 返回该货主的完整产品列表；没有该 owner 的库存时返回空 `inventoryList`，不能泄露其他货主或仓库库存。
+- API09 只读，不扣减预留量、不生成库存移动或调整。当前开发库没有真实内部库存记录；模拟库存自动化只能验证查询与隔离行为，不能视作 Karl Rapp 到 Odoo 的库存同步证据。
+- Ginlong 管理界面复用现有 Settings、`world.depot.api.log` 和 WMS 业务模型。回传日志通过单一 Reference 字段定位原业务单据，库存管理员只读访问；失败后用户返回原单据使用既有按钮，不建立独立重发流程。
+
 ## 6. 安全与开发约束
 
 1. Gateway 对外部文件/XML 做必要安全解析，并限制文件大小、格式及结构。
@@ -204,3 +220,12 @@ Ginlong 入站 UPDATE 复用对应现有 WMS 业务模型的修改逻辑；`audi
 | v1.8 | 2026-11-18 | 纳入 API02 收货明细、API06 实际备货托盘/重量及 API08 发货明细规则；登记 API07 owner+productCode 复合键和 WMS 重复编码消歧要求。 |
 | v1.9 | 2026-11-18 | 记录最终确认：API02/08 明细状态混合 Y/N 时阻止回传；API06 DECIMAL(18,6) 按 V3.2 示例发送 JSON string，重量来源为 `product.ginlong_weight`。 |
 | v2.0 | 2026-11-18 | 根据后续 Ginlong 接口矩阵，确认 API03 方向为 Ginlong → Odoo；早期 A-003 仅作为历史开发假设。 |
+| v2.1 | 2026-11-18 | 明确货主在 Ginlong 接口中使用编码而非名称；同一产品编码可跨货主重复，产品及库存均按 `ownerCode + productCode` 区分，不改变 WMS 单字段编码规则。 |
+| v2.2 | 2026-11-18 | 明确 Ginlong 推送的入库单和出库单均为单货主单据，订单级货主编码适用于全部产品明细；不因此重开已关闭 CC 的范围。 |
+| v2.3 | 2026-11-18 | 明确仓库实际作业数据来自 Karl Rapp，Odoo 以 `stock.picking` 和原生库存机制记录；API09 返回 Odoo 实际物理在库数量，不扣除预留量、不使用计划数推算。 |
+| v2.4 | 2026-11-18 | 明确 API09 库存维度为 `(ownerCode, warehouseCode, productCode)`；产品身份仍为 `(ownerCode, productCode)`。 |
+| v2.5 | 2026-11-18 | 记录 CC-GIN-004 冻结的单仓库无映射方案、API09 物理库存只读来源和管理界面复用/日志定位方式；明确模拟库存测试不证明 Karl Rapp 库存同步。 |
+| v2.6 | 2026-11-18 | 补充 API09 必须直接匹配 `stock.warehouse.code`；未知仓库编码拒绝查询，未知货主返回空库存，不得返回其他仓库或货主的数据。 |
+| v2.7 | 2026-11-18 | 明确 API09 先以 owner 编码查找 `res.partner.ginlong_owner_code` 并按 `stock.quant.owner_id` 隔离；记录仓库短码长度与 Ginlong 40 字符字段的兼容性待确认。 |
+| v2.8 | 2026-11-18 | 明确 API01 可按 owner 编码复用或创建货主档案并关联入库单；API03 必须按 owner+productCode 找现有产品，缺失拒绝且不自动创建产品，产品由 API07 维护。 |
+| v2.9 | 2026-11-18 | 记录项目负责人授权并实施 API01/03 货主规则：API01 按货主编码复用或创建唯一货主档案并关联订单；API03 只接受已存在货主及货主+产品组合，缺失时拒绝订单，不创建产品。 |

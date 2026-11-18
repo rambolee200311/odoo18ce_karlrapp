@@ -14,6 +14,7 @@
                     <group>
                         <group string="API02 收货确认">
                             <field name="reference" readonly="1"/>
+                            <field name="ginlong_owner_id" readonly="1"/>
                             <field name="state" readonly="1"/>
                             <field name="status" readonly="1"/>
                             <div class="o_form_label">Action：UPDATE</div>
@@ -60,6 +61,7 @@
                     <group>
                         <group string="API06 备货完成">
                             <field name="reference" readonly="1"/>
+                            <field name="ginlong_owner_id" readonly="1"/>
                             <field name="state" readonly="1"/>
                             <field name="status" readonly="1"/>
                             <field name="picking_PICK" readonly="1"/>

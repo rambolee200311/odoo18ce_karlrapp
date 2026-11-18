@@ -1,7 +1,7 @@
 import json
 import logging
 
-from odoo import http
+from odoo import fields, http
 from odoo.exceptions import UserError
 from odoo.service.model import PG_CONCURRENCY_EXCEPTIONS_TO_RETRY
 from odoo.http import request
@@ -26,11 +26,13 @@ class GinlongSimulationController(http.Controller):
             mimetype="application/json",
         )
 
-    def _dispatch(self, api_code, handler):
+    def _dispatch(self, api_code, handler, error_status=200):
         try:
             payload = json.loads(request.httprequest.data or b"{}")
             if not isinstance(payload, dict):
-                return self._json_response({"success": False, "error": "Request body must be a JSON object"})
+                return self._json_response(
+                    {"success": False, "error": "Request body must be a JSON object"}, status=error_status,
+                )
             request_path = getattr(request.httprequest, "path", "")
             payload = services.normalize_inbound_action(
                 api_code, payload, strict=request_path.startswith("/api/ginlong/"),
@@ -50,12 +52,14 @@ class GinlongSimulationController(http.Controller):
             # deadlock errors; converting them to JSON here would bypass it.
             raise
         except (TypeError, ValueError) as error:
-            return self._json_response({"success": False, "error": "Invalid JSON request: %s" % error})
+            return self._json_response(
+                {"success": False, "error": "Invalid JSON request: %s" % error}, status=error_status,
+            )
         except UserError as error:
-            return self._json_response({"success": False, "error": str(error)})
+            return self._json_response({"success": False, "error": str(error)}, status=error_status)
         except Exception as error:
             _logger.info("Ginlong local simulation request rejected: %s", error)
-            return self._json_response({"success": False, "error": str(error)})
+            return self._json_response({"success": False, "error": str(error)}, status=error_status)
 
     @http.route(['/ginlong/sim/api01', '/api/ginlong/TPL_Pending_Receipt_Note'], type='http', auth='none', methods=['POST'], csrf=False)
     @validate_token
@@ -69,8 +73,8 @@ class GinlongSimulationController(http.Controller):
     @api_logger
     @rate_limit("API03")
     def api03(self, **params):
-        # API03 remains the local A-003 Solis -> Odoo development assumption.
-        return self._dispatch("API03", services.api03)
+        # Ginlong pushes the outbound order into Odoo.
+        return self._dispatch("API03", services.api03, error_status=400)
 
     @http.route(['/ginlong/sim/api05', '/api/ginlong/TPL_Stocktake_Order'], type='http', auth='none', methods=['POST'], csrf=False)
     @validate_token
@@ -85,3 +89,24 @@ class GinlongSimulationController(http.Controller):
     @rate_limit("API07")
     def api07(self, **params):
         return self._dispatch("API07", services.api07)
+
+    @http.route('/api/ginlong/TPL_Stock_Query', type='http', auth='none', methods=['POST'], csrf=False)
+    @validate_token
+    @api_logger
+    def api09(self, **params):
+        try:
+            payload = json.loads(request.httprequest.data or b"{}")
+            if not isinstance(payload, dict):
+                raise ValueError("Request body must be a JSON object")
+            result = services.api09(request.env, payload)
+            return self._json_response(result)
+        except (TypeError, ValueError, UserError) as error:
+            return self._json_response({"error": str(error)}, status=400)
+        except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
+            raise
+        except Exception as error:
+            _logger.exception("Ginlong API09 inventory query failed")
+            return self._json_response(
+                {"error": "Inventory query failed", "operationTime": fields.Datetime.to_string(fields.Datetime.now())},
+                status=500,
+            )

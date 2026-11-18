@@ -7,10 +7,21 @@ class ResPartner(models.Model):
 
     ginlong_owner_code = fields.Char(string="Ginlong Owner Code", copy=False, index=True)
 
+    _sql_constraints = [
+        (
+            "ginlong_owner_code_unique",
+            "unique(ginlong_owner_code)",
+            "Ginlong owner code must identify one partner.",
+        ),
+    ]
+
 
 class InboundOrder(models.Model):
     _inherit = 'world.depot.inbound.order'
 
+    ginlong_owner_id = fields.Many2one(
+        "res.partner", string="Ginlong 货主", copy=False, index=True,
+    )
     ginlong_owner_code = fields.Char(copy=False, index=True)
     ginlong_warehouse_code = fields.Char(copy=False)
     ginlong_business_type = fields.Char(copy=False, index=True)
@@ -41,6 +52,9 @@ class InboundOrderProductSerialNumber(models.Model):
 class OutboundOrder(models.Model):
     _inherit = 'world.depot.outbound.order'
 
+    ginlong_owner_id = fields.Many2one(
+        "res.partner", string="Ginlong 货主", copy=False, index=True,
+    )
     ginlong_owner_code = fields.Char(copy=False, index=True)
     ginlong_warehouse_code = fields.Char(copy=False)
     ginlong_business_type = fields.Char(copy=False, index=True)

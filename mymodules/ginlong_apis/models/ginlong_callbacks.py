@@ -239,6 +239,7 @@ def _write_api_log(order, api_code, endpoint, payload, response_text, status_cod
         "request_source": "Odoo user: %s" % order.env.user.login,
         "request_time": fields.Datetime.now(),
         "request_path": safe_endpoint,
+        "source_record": "%s,%s" % (order._name, order.id),
         "request_data": request_data,
         "response_data": safe_response,
         "exception_details": safe_error or False,

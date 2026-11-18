@@ -9,14 +9,14 @@
 | 字段 | 值 |
 |---|---|
 | Intent ID | `GINLONG-API-IDEMPOTENCY-RATELIMIT-001` |
-| ATR 版本 | v1.2 |
+| ATR 版本 | v1.3 |
 | IHR | [IHR-GIN-003](IHR-GIN-003.md) |
 | CC | [CC-GIN-003 v1.4](CC-GIN-003-v1.4.md) 实施增补；[v1.5 Closed](CC-GIN-003-v1.5.md)；v1.1 冻结基线及后续历史版本保留 |
 | Module | `ginlong_apis`、`worlddepot` 受影响代码 |
 | Environment | Odoo 18；既有 `venv`、`odoo.conf`、数据库 `odooce_karlrapp` |
 | Test Framework | Odoo 标准 `TransactionCase` / test runner；真实四 Worker 本机 HTTP/ORM 验证；本机响应丢失代理 |
 | 入站历史 addon 指纹 | `GINLONG-WT-0ce7e607aad78a0791719bf08bf700a768bc47ae43e4e1d9bd262af65c06377b`（ATR-RUN-017 使用；非本轮回传代码指纹） |
-| 当前源文件核对 | 持久化回传 Form、API05、盘点模型、owner resolver 和相关测试见工作树；Ginlong addon 版本 `18.0.2.0.6`；ATR-RUN-041–048 为本轮最终运行证据 |
+| 当前源文件核对 | 持久化回传 Form、API05、盘点模型、owner resolver 和 API01/03 货主处理见工作树；Ginlong addon 版本 `18.0.2.0.9`；ATR-RUN-049–055 为关闭后的项目负责人决策补充证据 |
 | 执行者 | Codex |
 
 所有数据库数据核验、临时记录创建和清理均通过 Odoo Shell ORM；未直接访问 PostgreSQL或执行 SQL。未安装或使用 `stock_barcode`。没有访问 Ginlong 外部端点。
@@ -119,6 +119,13 @@
 | ATR-RUN-046 | 按用户最终确认追加 3 个定向 post-tests：API02/08 混合 Y/N 阻止 HTTP 并记录独立失败日志；API06 DECIMAL 字段序列化为 JSON string；重量来源及手工覆盖保持正确。3 项、0 failed / 0 error。 | `/private/tmp/ccgin003_final_rules_r1.log`；2026-11-18 07:11 UTC。 |
 | ATR-RUN-047 | 最终代码状态下重跑 `ginlong_apis` 全量 Odoo post-tests：31 项、0 failed / 0 error。日志包含幂等并发测试预期唯一键冲突，由实现正确处理；runner 汇总未报告失败或错误。 | `/private/tmp/ccgin003_ginlong_final_r1.log`；2026-11-18 07:13 UTC。 |
 | ATR-RUN-048 | 在 API06 DECIMAL 格式化断言补齐后，再次运行 `ginlong_apis` 全量 Odoo post-tests：31 项、0 failed / 0 error。包含六位小数舍入及尾零清理检查；并发幂等用例中的唯一键冲突为预期竞争结果，runner 汇总无测试失败/错误。 | `/private/tmp/ccgin003_ginlong_final_r2.log`；2026-11-18 07:18 UTC。 |
+| ATR-RUN-049 | 项目负责人批准 API01/03 货主规则后的首次定向运行：6 个 post-tests，1 failed / 0 error。唯一失败为跨 owner 产品消歧测试在刻意清空货主编码后未恢复测试夹具；其他 API01/03 新规则测试通过。失败保留，不作为通过证据。 | `/private/tmp/ccgin_api01_api03_targeted.log`；2026-11-18 10:41:40 Odoo log time。 |
+| ATR-RUN-050 | 恢复测试夹具后重跑定向套件：6 个 post-tests，0 failed / 0 error；覆盖 API01 已有货主关联、缺失货主自动建档及不同订单复用、API03 已有货主与产品组合校验、API07 跨 owner 同码和既有订单更新。 | `/private/tmp/ccgin_api01_api03_targeted_r2.log`；2026-11-18 10:42:28 Odoo log time。 |
+| ATR-RUN-051 | 加入 API03 路由失败日志用例后的定向回归：7 个 post-tests，0 failed / 0 error；确认缺失 owner+productCode 时不创建订单/产品，返回 HTTP 400 JSON 业务错误，现有 API logger 记录 `status=error`、`success=false`。 | `/private/tmp/ccgin_api01_api03_targeted_r3.log`；2026-11-18 10:45:15 Odoo log time。 |
+| ATR-RUN-052 | `ginlong_apis` 全量 Odoo 自动化回归：40 个 post-tests，0 failed / 0 error。覆盖 API01/API03 货主新规则及既有 API07、API09、回传、幂等/限流测试。 | `/private/tmp/ccgin_api01_api03_full_r2.log`；2026-11-18 10:45:45 Odoo log time。 |
+| ATR-RUN-053 | 通过既有 `odoo shell -c odoo.conf --no-http` 做只读 ORM registry 核验：模块 `installed 18.0.2.0.9`；入库/出库订单上的 `ginlong_owner_id` 均为 `res.partner` Many2one；`res.partner.ginlong_owner_code` 唯一约束已注册；当前开发库 0 条 Ginlong owner 编码记录、无重复；未留下测试 owner。 | `/private/tmp/ccgin_api01_api03_orm_final_r2.log`；2026-11-18。 |
+| ATR-RUN-054 | API03 表头更新货主一致性定向回归：4 个 post-tests，0 failed / 0 error；不带 `details` 把出库订单货主改为没有对应产品的 owner 时拒绝更新，原 owner 及产品行不变；合法同 owner 更新和 API01 复用规则继续通过。 | `/private/tmp/ccgin_api01_api03_targeted_r4.log`；2026-11-18 11:06:45 Odoo log time。 |
+| ATR-RUN-055 | 加入表头更新现有产品行核验后的最终 Ginlong 全量 Odoo 自动化回归：40 个 post-tests，0 failed / 0 error。 | `/private/tmp/ccgin_api01_api03_full_r3.log`；2026-11-18 11:07:15 Odoo log time。 |
 
 ATR-RUN-008 命令（使用既有 venv/config/database）：
 
@@ -329,11 +336,31 @@ venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --test-
 - ATR-RUN-045 的 Odoo Shell ORM 核验输出保存于 `/private/tmp/ccgin003_orm_registry_r1.log`；未运行 SQL、psql、数据库驱动或 stock_barcode。
 - ATR-RUN-046 运行命令：`venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --test-enable --test-tags /ginlong_apis:TestGinlongAPI.test_api02_and_api08_block_mixed_saved_detail_statuses,/ginlong_apis:TestGinlongAPI.test_api06_uses_saved_actual_preparation_for_totals,/ginlong_apis:TestGinlongAPI.test_api06_and_api08_send_saved_operation_data --stop-after-init --http-port=0 --gevent-port=0 --log-level=info --log-handler=odoo.tests:INFO --logfile=/private/tmp/ccgin003_final_rules_r1.log`。
 - ATR-RUN-047 最终 Ginlong 全量命令与筛选/环境同 ATR-RUN-043，日志为 `/private/tmp/ccgin003_ginlong_final_r1.log`；ATR-RUN-048 同命令日志为 `/private/tmp/ccgin003_ginlong_final_r2.log`；均汇总 `31 post-tests`、`0 failed, 0 error(s)`。
+- ATR-RUN-049/050/051/052/054/055 均使用既有 `venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --test-enable --stop-after-init --http-port=0 --gevent-port=0 --log-level=info --log-handler=odoo.tests:INFO`；049 为 6 个定向测试首次失败，050 为修复夹具后的 6 项定向通过，051 为加入 API03 失败日志后的 7 项定向通过，052 为当时版本的 40 个全量 post-tests，054 为 API03 表头更新 4 个定向 post-tests，055 为包含全部最终改动的 40 个全量 post-tests。对应原始日志见运行表。
+- ATR-RUN-053 ORM registry 补充核查使用 `venv/bin/python odoo-bin shell -c odoo.conf -d odooce_karlrapp --no-http`；核对模块状态/版本、owner 关系字段、partner owner-code 唯一约束及无测试残留，未执行 SQL。
 - 最新 Ginlong addon 指纹：§1。
 
 ## 10. 移交摘要
 
 本地 CC-TEST-001–024 自动化验收均有通过证据：Ginlong 最终全量 31 项、worlddepot 全量 8 项、最终规则定向 3 项和 ORM registry 核验通过；CC-TEST-010/017/019 沿用既有通过证据，本轮未重跑。用户已确认 API02/08 混合状态不发送、API06 数值为 JSON string、重量字段取 `product.ginlong_weight`，实现和测试结果见 §7.4。外部撤销/部分执行语义、完整人工 WMS E2E 和真实 Ginlong 联调留最终集成 CC；模板同步仍 BLOCKED 且沿用已批准流程例外。CC-GIN-003 已依据 FR-GIN-003 v1.0（Closure SATISFIED；Human Review APPROVED）关闭；本轮未重跑测试。
+
+以上为 CC-GIN-003 关闭时的移交基线摘要；关闭后的项目负责人决策补充及后续运行结果见 §11，不覆盖或改写关闭时证据。
+
+## 11. CC-GIN-003 关闭后的项目负责人决策补充
+
+本节是按项目负责人明确授权追加的 API01/03 实施记录，不重开或修改 CC-GIN-003 v1.1–v1.5、FR-GIN-003 v1.0 或其关闭证据。
+
+| 决策/测试范围 | 实施与结果 | 证据 |
+|---|---|---|
+| API01 货主档案 | 将请求 `owner` 按 `res.partner.ginlong_owner_code` 精确匹配；存在则复用，不存在则创建（接口不提供货主名称，显示名使用编码），写入订单上的 `ginlong_owner_id` 直接关系；编码唯一约束防止重复档案。WorldDepot 原有 `owner` 项目关联字段保持不变。 | ATR-RUN-050/051、ATR-RUN-052、Odoo Shell ORM registry 核验 |
+| API03 货主及产品 | 要求 `owner` 已存在；每条入站明细按 `ginlong_owner_code + default_code` 查现有产品；无明细的表头更新仍校验订单已有明细与目标 owner 一致；缺货主或缺组合时不创建/修改订单或产品。不同货主同产品编码仍可定位对应产品。 | ATR-RUN-051/054/055 |
+| API03 失败日志 | 缺少 owner+productCode 组合时返回 HTTP 400 的 JSON 业务错误，现有 `worlddepot` API logger 将响应记录为 `status=error`、`success=false`。 | ATR-RUN-051 |
+| 首次测试失败 | 初次目标运行 6 个 post-tests，1 failed：既有跨 owner 消歧测试在故意清空 owner code 后未恢复夹具，导致 API01 合法地创建新 owner；恢复夹具后重跑。实现/约束不回退，原失败保留。 | ATR-RUN-049，`/private/tmp/ccgin_api01_api03_targeted.log` |
+| 目标回归 | 夹具修复后 6 个定向 post-tests 通过；加入 API03 HTTP 业务错误和日志检查后，7 个定向 post-tests 0 failed / 0 error。 | ATR-RUN-050/051，见 §5 |
+| 全量 Ginlong 回归 | `ginlong_apis` 最终全量 40 个 post-tests，0 failed / 0 error；包含 API01/03、API07 跨 owner 同码、API09 与回传/幂等限流现有测试。 | ATR-RUN-055 |
+| ORM 检查 | 模块 `installed 18.0.2.0.9`；两个现有订单模型上的 `ginlong_owner_id` 均为 `res.partner` Many2one；`res.partner.ginlong_owner_code` 唯一约束已注册；事务测试未留下 owner 记录。 | Odoo Shell ORM，只读检查；详见 IHR-021 |
+
+本补充没有访问真实 Ginlong；不代表完整人工 WMS E2E 或真实联调通过。模板同步仍 `BLOCKED`，保留既有批准例外。
 
 ## 附录：版本记录
 
@@ -350,3 +377,4 @@ venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --test-
 | v1.0 | 2026-11-18 | 追加 ATR-RUN-041–048：保留首次失败；Ginlong 最终 31 项、worlddepot 8 项、最终规则定向 3 项及 ORM registry 核验通过。API02/08 混合状态阻止及 API06 JSON string 按用户最终确认实现；本地验收通过并提交 Human Review 关闭评估。 | Ready for Human Review |
 | v1.1 | 2026-11-18 | 勘误当前记录：依据后续 Ginlong 接口矩阵确认 API03 为 Ginlong→Odoo；将 A-003 降为历史假设，真实外部联调仍未执行。保留所有旧分析与测试记录。 | Ready for Human Review |
 | v1.2 | 2026-11-18 | 追加关闭状态记录：依据 FR-GIN-003 v1.0 与 Human Review APPROVED，将 CC-GIN-003 当前状态标记 Closed；不新增测试运行，全部原始测试结果和模板同步 BLOCKED 记录保留 | CC-GIN-003 Closed |
+| v1.3 | 2026-11-18 | 追加关闭后项目负责人授权的 API01/03 货主档案及 owner+productCode 校验实施证据；保留首次失败并记录 7 项定向、40 项全量 Odoo 测试及 ORM registry 核验；不改变 CC/FR 关闭历史 | Approved post-closure supplement |

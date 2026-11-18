@@ -439,6 +439,7 @@ class TestGinlongAPI(TransactionCase):
         self.assertTrue(result["success"])
         order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
         self.assertEqual(order.reference, "GINLONG-IN-001")
+        self.assertEqual(order.ginlong_owner_id, self.owner)
         self.assertEqual(order.ginlong_owner_code, "OWNER-01")
         self.assertEqual(order.ginlong_warehouse_code, "WH-01")
         self.assertEqual(order.ginlong_business_type, "STANDARD")
@@ -477,11 +478,50 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(order.state, "cancel")
         self.assertEqual(len(order.inbound_order_product_ids), 1)
 
+    def test_api01_creates_owner_by_code_and_reuses_it_for_later_orders(self):
+        owner_code = "OWNER-API01-AUTO-CREATE"
+        product_code = "GINLONG-API01-AUTO-OWNER-PRODUCT"
+        product = self.env["product.product"].create({
+            "name": "Ginlong API01 auto-owner product",
+            "default_code": product_code,
+            "ginlong_owner_code": owner_code,
+            "type": "consu",
+        })
+        first_payload = self._api01("GINLONG-IN-AUTO-OWNER-1")
+        first_payload["owner"] = owner_code
+        first_payload["details"][0]["productCode"] = product_code
+        first_payload["snList"][0]["productCode"] = product_code
+        first_result = services.api01(self.env, self.api_user, first_payload)
+        first_order = self.env["world.depot.inbound.order"].browse(first_result["data"]["id"])
+
+        owners = self.env["res.partner"].with_context(active_test=False).search([
+            ("ginlong_owner_code", "=", owner_code),
+        ])
+        self.assertEqual(len(owners), 1)
+        self.assertEqual(owners.name, owner_code)
+        self.assertEqual(first_order.ginlong_owner_id, owners)
+        self.assertEqual(
+            first_order.inbound_order_product_ids[0].inbound_order_product_pallet_ids[0].product_id,
+            product,
+        )
+
+        second_payload = dict(first_payload, inboundOrderNo="GINLONG-IN-AUTO-OWNER-2")
+        second_result = services.api01(self.env, self.api_user, second_payload)
+        second_order = self.env["world.depot.inbound.order"].browse(second_result["data"]["id"])
+        self.assertEqual(second_order.ginlong_owner_id, owners)
+        self.assertEqual(
+            self.env["res.partner"].with_context(active_test=False).search_count([
+                ("ginlong_owner_code", "=", owner_code),
+            ]),
+            1,
+        )
+
     def test_api03_maps_all_source_fields_without_execution(self):
         result = services.api03(self.env, self.api_user, self._api03())
         self.assertTrue(result["success"])
         order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
         self.assertEqual(order.reference, "GINLONG-OUT-001")
+        self.assertEqual(order.ginlong_owner_id, self.owner)
         self.assertEqual(order.remark, "outbound local simulation")
         self.assertEqual(order.ginlong_owner_code, "OWNER-01")
         self.assertEqual(order.ginlong_warehouse_code, "WH-01")
@@ -524,6 +564,109 @@ class TestGinlongAPI(TransactionCase):
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
         self.assertEqual(len(order.outbound_order_product_ids), 1)
+
+    def test_api03_requires_existing_owner_and_owner_product_pair(self):
+        unknown_owner_payload = self._api03("GINLONG-OUT-UNKNOWN-OWNER")
+        unknown_owner_payload["owner"] = "OWNER-API03-UNKNOWN"
+        with self.assertRaisesRegex(ValidationError, "owner code OWNER-API03-UNKNOWN was not found"):
+            services.api03(self.env, self.api_user, unknown_owner_payload)
+        self.assertFalse(self.env["world.depot.outbound.order"].search([
+            ("reference", "=", "GINLONG-OUT-UNKNOWN-OWNER"),
+        ]))
+        self.assertFalse(self.env["res.partner"].with_context(active_test=False).search([
+            ("ginlong_owner_code", "=", "OWNER-API03-UNKNOWN"),
+        ]))
+
+        other_owner = self.env["res.partner"].create({
+            "name": "Ginlong API03 owner without requested product",
+            "is_company": True,
+            "ginlong_owner_code": "OWNER-API03-NO-PRODUCT",
+        })
+        missing_pair_payload = self._api03("GINLONG-OUT-MISSING-OWNER-PRODUCT")
+        missing_pair_payload["owner"] = other_owner.ginlong_owner_code
+        with self.assertRaisesRegex(ValidationError, "was not found for Ginlong owner OWNER-API03-NO-PRODUCT"):
+            services.api03(self.env, self.api_user, missing_pair_payload)
+        self.assertFalse(self.env["world.depot.outbound.order"].search([
+            ("reference", "=", "GINLONG-OUT-MISSING-OWNER-PRODUCT"),
+        ]))
+        self.assertFalse(self.env["product.product"].search([
+            ("default_code", "=", self.product.default_code),
+            ("ginlong_owner_code", "=", other_owner.ginlong_owner_code),
+        ]))
+
+        existing_order_result = services.api03(
+            self.env, self.api_user, self._api03("GINLONG-OUT-OWNER-CHANGE"),
+        )
+        existing_order = self.env["world.depot.outbound.order"].browse(existing_order_result["data"]["id"])
+        owner_change_payload = {
+            "owner": other_owner.ginlong_owner_code,
+            "action": "Edit",
+            "outboundOrderNo": existing_order.reference,
+            "warehouse": "WH-02",
+            "businessType": "UPDATED",
+        }
+        with self.assertRaisesRegex(ValidationError, "was not found for Ginlong owner OWNER-API03-NO-PRODUCT"):
+            services.api03(self.env, self.api_user, owner_change_payload)
+        self.assertEqual(existing_order.ginlong_owner_id, self.owner)
+        self.assertEqual(existing_order.outbound_order_product_ids.product_id, self.product)
+
+    def test_api03_rejected_owner_product_pair_returns_and_logs_business_error(self):
+        owner = self.env["res.partner"].create({
+            "name": "Ginlong API03 logged owner",
+            "is_company": True,
+            "ginlong_owner_code": "OWNER-API03-LOG",
+        })
+        payload = self._api03("GINLONG-OUT-LOGGED-REJECTION")
+        payload["owner"] = owner.ginlong_owner_code
+        payload["details"][0]["productCode"] = "GINLONG-PRODUCT-NOT-REGISTERED"
+        token_value = "ginlong-api03-rejected-pair-token"
+        self.env["world.depot.api.token"].create({
+            "user_id": self.api_user.user_id.id,
+            "token": token_value,
+            "expires": fields.Datetime.now() + timedelta(hours=1),
+        })
+        log_model = _LogModel()
+        log_environment = _LogEnvironment(log_model)
+        original_environment = api_logs.api.Environment
+
+        def environment_factory(cr, uid, context, *args, **kwargs):
+            if isinstance(cr, _CursorContext):
+                return log_environment
+            return original_environment(cr, uid, context, *args, **kwargs)
+
+        fake_request = SimpleNamespace(
+            httprequest=SimpleNamespace(
+                data=json.dumps(payload).encode("utf-8"),
+                remote_addr="127.0.0.1",
+                path="/api/ginlong/TPL_Pending_Delivery_Note",
+                headers={"Authorization": "Bearer " + token_value},
+            ),
+            env=self.env,
+            registry=SimpleNamespace(cursor=_CursorContext),
+            api_user=False,
+            update_env=lambda user: None,
+        )
+        endpoint = ginlong_controller.GinlongSimulationController()
+        with patch.object(validator_token, "request", fake_request), \
+                patch.object(api_logs, "request", fake_request), \
+                patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(rate_limiter, "request", fake_request), \
+                patch.object(rate_limiter, "_reserve", return_value=True), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory):
+            response = endpoint.api03()
+
+        response_body = json.loads(response.get_data(as_text=True))
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response_body["success"])
+        self.assertIn("was not found for Ginlong owner OWNER-API03-LOG", response_body["error"])
+        self.assertEqual(len(log_model.values), 1)
+        self.assertEqual(log_model.values[0]["status"], "error")
+        self.assertFalse(log_model.values[0]["success"])
+        self.assertEqual(log_model.values[0]["code"], "400")
+        self.assertIn("GINLONG-PRODUCT-NOT-REGISTERED", log_model.values[0]["request_data"])
+        self.assertFalse(self.env["world.depot.outbound.order"].search([
+            ("reference", "=", "GINLONG-OUT-LOGGED-REJECTION"),
+        ]))
 
     def test_api05_stores_customer_instruction_in_worlddepot_without_stock_access(self):
         payload = {
@@ -640,6 +783,7 @@ class TestGinlongAPI(TransactionCase):
         project2.owner.ginlong_owner_code = False
         with self.assertRaisesRegex(ValueError, "ambiguous"):
             _resolve_product(self.env, product.default_code, project2)
+        project2.owner.ginlong_owner_code = "OWNER-02"
 
         api01_payload = self._api01("GINLONG-IN-OWNER-02")
         api01_payload["owner"] = "OWNER-02"
@@ -647,6 +791,7 @@ class TestGinlongAPI(TransactionCase):
         api01_payload["snList"][0]["productCode"] = product.default_code
         inbound_result = services.api01(self.env, self.api_user, api01_payload)
         inbound = self.env["world.depot.inbound.order"].browse(inbound_result["data"]["id"])
+        self.assertEqual(inbound.ginlong_owner_id, owner2)
         self.assertEqual(
             inbound.inbound_order_product_ids[0].inbound_order_product_pallet_ids[0].product_id,
             other_product,
@@ -657,6 +802,7 @@ class TestGinlongAPI(TransactionCase):
         api03_payload["details"][0]["productCode"] = product.default_code
         outbound_result = services.api03(self.env, self.api_user, api03_payload)
         outbound = self.env["world.depot.outbound.order"].browse(outbound_result["data"]["id"])
+        self.assertEqual(outbound.ginlong_owner_id, owner2)
         self.assertEqual(outbound.outbound_order_product_ids[0].product_id, other_product)
 
     def test_api02_receipt_details_persist_actual_inbound_data(self):
@@ -765,6 +911,7 @@ class TestGinlongAPI(TransactionCase):
             "warehouse": "WH-02", "businessType": "UPDATED", "remark": "updated inbound",
         })
         self.assertEqual(inbound_order.ginlong_owner_code, "OWNER-02")
+        self.assertEqual(inbound_order.ginlong_owner_id.ginlong_owner_code, "OWNER-02")
         self.assertEqual(inbound_order.ginlong_warehouse_code, "WH-02")
         self.assertEqual(inbound_order.ginlong_business_type, "UPDATED")
         self.assertEqual(inbound_order.remark, "updated inbound")
@@ -781,10 +928,11 @@ class TestGinlongAPI(TransactionCase):
         outbound_order.picking_PICK = outbound_picking.id
         outbound_move_line = outbound_picking.move_line_ids
         services.api03(self.env, self.api_user, {
-            "owner": "OWNER-02", "action": "Edit", "outboundOrderNo": outbound_order.reference,
+            "owner": "OWNER-01", "action": "Edit", "outboundOrderNo": outbound_order.reference,
             "warehouse": "WH-02", "businessType": "UPDATED", "remark": "updated outbound",
         })
-        self.assertEqual(outbound_order.ginlong_owner_code, "OWNER-02")
+        self.assertEqual(outbound_order.ginlong_owner_code, "OWNER-01")
+        self.assertEqual(outbound_order.ginlong_owner_id.ginlong_owner_code, "OWNER-01")
         self.assertEqual(outbound_order.ginlong_warehouse_code, "WH-02")
         self.assertEqual(outbound_order.ginlong_business_type, "UPDATED")
         self.assertEqual(outbound_order.remark, "updated outbound")
@@ -865,6 +1013,8 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(len(logs), 2)
         self.assertFalse(logs[0].success)
         self.assertTrue(logs[1].success)
+        self.assertEqual(logs[0].source_record, order)
+        self.assertEqual(logs[1].source_record, order)
         self.assertIn('"receiptConfirmed": "Y"', logs[0].request_data)
         self.assertIn('"receiptConfirmed": "N"', logs[1].request_data)
 
@@ -1394,13 +1544,17 @@ class TestGinlongAPI(TransactionCase):
         self.assertIs(ginlong_controller.validate_token, validator_token.validate_token)
         self.assertIs(ginlong_controller.api_logger, api_logs.api_logger)
         controller = ginlong_controller.GinlongSimulationController
-        for route_name in ("api01", "api03", "api05", "api07"):
+        for route_name in ("api01", "api03", "api05", "api07", "api09"):
             function = getattr(controller, route_name)
             wrapper_count = 0
             while function:
                 wrapper_count += 1
                 function = getattr(function, "__wrapped__", False)
             self.assertGreaterEqual(wrapper_count, 3)
+        api09_route = controller.api09.original_routing
+        self.assertEqual(api09_route["routes"], ["/api/ginlong/TPL_Stock_Query"])
+        self.assertEqual(api09_route["methods"], ["POST"])
+        self.assertEqual(api09_route["type"], "http")
 
     def test_api01_decorated_route_authenticates_and_logs_with_existing_logger(self):
         token_value = "ginlong-route-test-token"
@@ -1504,3 +1658,377 @@ class TestGinlongAPI(TransactionCase):
         self.assertTrue(response.headers.get("Retry-After"))
         self.assertEqual(log_model.values[0]["code"], "429")
         self.assertFalse(log_model.values[0]["success"])
+
+    def test_api09_returns_owner_scoped_physical_stock_read_only(self):
+        other_owner = self.env["res.partner"].create({
+            "name": "Ginlong API09 second owner partner",
+            "is_company": True,
+            "ginlong_owner_code": "OWNER-02",
+        })
+        other_owner_product = self.env["product.product"].create({
+            "name": "Ginlong API09 same-code second owner",
+            "default_code": self.product.default_code,
+            "ginlong_owner_code": "OWNER-02",
+            "type": "consu",
+        })
+        self.product.product_tmpl_id.is_storable = True
+        other_owner_product.product_tmpl_id.is_storable = True
+        second_product_same_owner = self.env["product.product"].create({
+            "name": "Ginlong API09 second item same owner",
+            "default_code": "GINLONG-API09-SECOND-001",
+            "ginlong_owner_code": "OWNER-01",
+            "type": "consu",
+        })
+        second_product_same_owner.product_tmpl_id.is_storable = True
+        second_location = self.env["stock.location"].create({
+            "name": "Ginlong API09 internal test location",
+            "location_id": self.warehouse.lot_stock_id.id,
+            "usage": "internal",
+            "company_id": self.env.company.id,
+        })
+        quant_model = self.env["stock.quant"].sudo()
+        quant_model.create({
+            "product_id": self.product.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": self.owner.id,
+            "quantity": 3.25,
+            "reserved_quantity": 1.0,
+        })
+        quant_model.create({
+            "product_id": self.product.id,
+            "location_id": second_location.id,
+            "owner_id": self.owner.id,
+            "quantity": 2.5,
+            "reserved_quantity": 0.5,
+        })
+        quant_model.create({
+            "product_id": other_owner_product.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": other_owner.id,
+            "quantity": 9.75,
+            "reserved_quantity": 9.0,
+        })
+        quant_model.create({
+            "product_id": second_product_same_owner.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": self.owner.id,
+            "quantity": 7.125,
+            "reserved_quantity": 0.125,
+        })
+
+        quant_domain = [("location_id", "child_of", self.warehouse.view_location_id.id)]
+        before_quants = quant_model.search(quant_domain).read(["quantity", "reserved_quantity", "write_date"])
+        before_moves = self.env["stock.move"].sudo().search_count([])
+        owner_one = services.api09(self.env, {"owner": "OWNER-01", "warehouse": self.warehouse.code})
+        owner_two = services.api09(self.env, {"owner": "OWNER-02", "warehouse": self.warehouse.code})
+        empty_owner = services.api09(self.env, {"owner": "OWNER-EMPTY", "warehouse": self.warehouse.code})
+        after_quants = quant_model.search(quant_domain).read(["quantity", "reserved_quantity", "write_date"])
+
+        self.assertEqual(set(owner_one), {
+            "returnStatus", "exceptionInfo", "operationTime", "owner", "warehouse", "inventoryList",
+        })
+        self.assertEqual(owner_one["returnStatus"], "Y")
+        self.assertEqual(owner_one["exceptionInfo"], "OK")
+        self.assertEqual(owner_one["owner"], "OWNER-01")
+        self.assertEqual(owner_one["warehouse"], self.warehouse.code)
+        self.assertEqual(owner_one["inventoryList"], [
+            {"productCode": self.product.default_code, "quantity": 5.75},
+            {"productCode": second_product_same_owner.default_code, "quantity": 7.13},
+        ])
+        self.assertTrue(all(isinstance(row["quantity"], float) for row in owner_one["inventoryList"]))
+        self.assertEqual(owner_two["inventoryList"], [{"productCode": self.product.default_code, "quantity": 9.75}])
+        self.assertEqual(empty_owner["inventoryList"], [])
+        self.assertEqual(before_quants, after_quants)
+        self.assertEqual(before_moves, self.env["stock.move"].sudo().search_count([]))
+
+    def test_api09_unknown_owner_does_not_return_other_owner_inventory(self):
+        other_owner = self.env["res.partner"].create({
+            "name": "Ginlong API09 existing different owner",
+            "is_company": True,
+            "ginlong_owner_code": "OWNER-EXISTS",
+        })
+        other_owner_product = self.env["product.product"].create({
+            "name": "Ginlong API09 inventory belonging to another owner",
+            "default_code": "GINLONG-API09-OTHER-OWNER",
+            "ginlong_owner_code": "OWNER-EXISTS",
+            "type": "consu",
+        })
+        other_owner_product.product_tmpl_id.is_storable = True
+        self.env["stock.quant"].sudo().create({
+            "product_id": other_owner_product.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": other_owner.id,
+            "quantity": 12,
+        })
+
+        response = services.api09(self.env, {
+            "owner": "OWNER-DOES-NOT-EXIST",
+            "warehouse": self.warehouse.code,
+        })
+
+        self.assertEqual(response["owner"], "OWNER-DOES-NOT-EXIST")
+        self.assertEqual(response["inventoryList"], [])
+
+    def test_api09_cross_owner_warehouse_inventory_matrix(self):
+        owner_b = self.env["res.partner"].create({
+            "name": "Ginlong API09 matrix owner B",
+            "is_company": True,
+            "ginlong_owner_code": "OWNER-B",
+        })
+        warehouse_b = self.env["stock.warehouse"].create({
+            "name": "Ginlong API09 matrix warehouse B",
+            "code": "WHB",
+            "company_id": self.env.company.id,
+        })
+        product_a = self.env["product.product"].create({
+            "name": "Ginlong API09 matrix owner A product",
+            "default_code": "P001",
+            "ginlong_owner_code": self.owner.ginlong_owner_code,
+            "type": "consu",
+        })
+        product_b = self.env["product.product"].create({
+            "name": "Ginlong API09 matrix owner B product",
+            "default_code": "P001",
+            "ginlong_owner_code": owner_b.ginlong_owner_code,
+            "type": "consu",
+        })
+        product_b_second = self.env["product.product"].create({
+            "name": "Ginlong API09 matrix owner B second product",
+            "default_code": "P002",
+            "ginlong_owner_code": owner_b.ginlong_owner_code,
+            "type": "consu",
+        })
+        for product in (product_a, product_b, product_b_second):
+            product.product_tmpl_id.is_storable = True
+
+        quant_model = self.env["stock.quant"].sudo()
+        quant_model.create({
+            "product_id": product_a.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": self.owner.id,
+            "quantity": 100,
+        })
+        quant_model.create({
+            "product_id": product_a.id,
+            "location_id": warehouse_b.lot_stock_id.id,
+            "owner_id": self.owner.id,
+            "quantity": 200,
+        })
+        quant_model.create({
+            "product_id": product_b.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": owner_b.id,
+            "quantity": 300,
+        })
+        quant_model.create({
+            "product_id": product_b_second.id,
+            "location_id": warehouse_b.lot_stock_id.id,
+            "owner_id": owner_b.id,
+            "quantity": 400,
+        })
+
+        combinations = (
+            (self.owner.ginlong_owner_code, self.warehouse.code, "P001", 100.0),
+            (self.owner.ginlong_owner_code, warehouse_b.code, "P001", 200.0),
+            (owner_b.ginlong_owner_code, self.warehouse.code, "P001", 300.0),
+            (owner_b.ginlong_owner_code, warehouse_b.code, "P002", 400.0),
+        )
+        for owner_code, warehouse_code, product_code, quantity in combinations:
+            with self.subTest(owner=owner_code, warehouse=warehouse_code):
+                result = services.api09(self.env, {
+                    "owner": owner_code,
+                    "warehouse": warehouse_code,
+                })
+                self.assertEqual(result["inventoryList"], [{
+                    "productCode": product_code,
+                    "quantity": quantity,
+                }])
+
+        owner_without_stock = self.env["res.partner"].create({
+            "name": "Ginlong API09 owner without inventory",
+            "is_company": True,
+            "ginlong_owner_code": "OWNER-NO-STOCK",
+        })
+        empty_inventory = services.api09(self.env, {
+            "owner": owner_without_stock.ginlong_owner_code,
+            "warehouse": self.warehouse.code,
+        })
+        self.assertEqual(empty_inventory["inventoryList"], [])
+
+        unknown_owner_result = services.api09(self.env, {
+            "owner": "OWNER-DOES-NOT-EXIST",
+            "warehouse": self.warehouse.code,
+        })
+        self.assertEqual(unknown_owner_result["inventoryList"], [])
+        with self.assertRaises(ValidationError):
+            services.api09(self.env, {
+                "owner": self.owner.ginlong_owner_code,
+                "warehouse": "NO-WH",
+            })
+        with self.assertRaises(ValidationError):
+            services.api09(self.env, {
+                "owner": "OWNER-DOES-NOT-EXIST",
+                "warehouse": "NO-WH",
+            })
+
+    def test_api09_validates_required_fields_and_length(self):
+        for payload in (
+            {"warehouse": self.warehouse.code},
+            {"owner": "OWNER-01"},
+            {"owner": "", "warehouse": self.warehouse.code},
+            {"owner": "OWNER-01", "warehouse": ""},
+            {"owner": "O" * 41, "warehouse": self.warehouse.code},
+            {"owner": "OWNER-01", "warehouse": "W" * 41},
+            {"owner": 22, "warehouse": self.warehouse.code},
+        ):
+            with self.subTest(payload=payload), self.assertRaises(ValidationError):
+                services.api09(self.env, payload)
+
+    def test_api09_route_uses_existing_token_and_api_logger(self):
+        token_value = "ginlong-api09-test-token"
+        self.env["world.depot.api.token"].create({
+            "user_id": self.api_user.user_id.id,
+            "token": token_value,
+            "expires": fields.Datetime.now() + timedelta(hours=1),
+        })
+        log_model = _LogModel()
+        log_environment = _LogEnvironment(log_model)
+        original_environment = api_logs.api.Environment
+
+        def environment_factory(cr, uid, context, *args, **kwargs):
+            if isinstance(cr, _CursorContext):
+                return log_environment
+            return original_environment(cr, uid, context, *args, **kwargs)
+
+        self.product.product_tmpl_id.is_storable = True
+        self.env["stock.quant"].sudo().create({
+            "product_id": self.product.id,
+            "location_id": self.warehouse.lot_stock_id.id,
+            "owner_id": self.owner.id,
+            "quantity": 23,
+        })
+        fake_request = SimpleNamespace(
+            httprequest=SimpleNamespace(
+                data=json.dumps({"owner": "OWNER-01", "warehouse": self.warehouse.code}).encode(),
+                remote_addr="127.0.0.1",
+                path="/api/ginlong/TPL_Stock_Query",
+                headers={"Authorization": "Bearer " + token_value, "Content-Type": "application/json"},
+            ),
+            env=self.env,
+            registry=SimpleNamespace(cursor=_CursorContext),
+            api_user=False,
+            update_env=lambda user: None,
+        )
+        endpoint = ginlong_controller.GinlongSimulationController()
+        with patch.object(validator_token, "request", fake_request), \
+                patch.object(api_logs, "request", fake_request), \
+                patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory):
+            response = endpoint.api09()
+
+        response_body = json.loads(response.get_data(as_text=True))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response_body["returnStatus"], "Y")
+        self.assertEqual(response_body["owner"], "OWNER-01")
+        self.assertEqual(response_body["warehouse"], self.warehouse.code)
+        self.assertEqual(response_body["inventoryList"], [
+            {"productCode": self.product.default_code, "quantity": 23.0},
+        ])
+        self.assertEqual(len(log_model.values), 1)
+        self.assertEqual(log_model.values[0]["request_path"], "/api/ginlong/TPL_Stock_Query")
+        self.assertTrue(log_model.values[0]["success"])
+        self.assertNotIn(token_value, str(log_model.values[0]))
+
+        fake_request.httprequest.data = json.dumps({
+            "owner": "OWNER-01",
+            "warehouse": "WAREHOUSE-DOES-NOT-EXIST",
+        }).encode()
+        with patch.object(validator_token, "request", fake_request), \
+                patch.object(api_logs, "request", fake_request), \
+                patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory):
+            unknown_warehouse = endpoint.api09()
+        unknown_warehouse_body = json.loads(unknown_warehouse.get_data(as_text=True))
+        self.assertEqual(unknown_warehouse.status_code, 400)
+        self.assertNotIn("inventoryList", unknown_warehouse_body)
+        self.assertIn("warehouse code", unknown_warehouse_body["error"])
+        self.assertEqual(len(log_model.values), 2)
+        self.assertFalse(log_model.values[-1]["success"])
+
+        fake_request.api_user = False
+        fake_request.httprequest.headers["Authorization"] = "Bearer invalid-api09-token"
+        with patch.object(validator_token, "request", fake_request), \
+                patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(ginlong_controller.services, "api09") as query:
+            unauthorized = endpoint.api09()
+        self.assertEqual(unauthorized.status_code, 401)
+        query.assert_not_called()
+        self.assertEqual(len(log_model.values), 2)
+
+        fake_request.httprequest.headers["Authorization"] = "Bearer " + token_value
+        fake_request.httprequest.data = json.dumps({"owner": "OWNER-01"}).encode()
+        with patch.object(validator_token, "request", fake_request), \
+                patch.object(api_logs, "request", fake_request), \
+                patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory):
+            invalid_request = endpoint.api09()
+        self.assertEqual(invalid_request.status_code, 400)
+        self.assertEqual(len(log_model.values), 3)
+        self.assertEqual(log_model.values[-1]["code"], "400")
+        self.assertEqual(log_model.values[-1]["status"], "error")
+        self.assertFalse(log_model.values[-1].get("source_record"))
+
+    def test_ginlong_management_actions_logs_acl_and_source_navigation(self):
+        log_model = self.env["world.depot.api.log"]
+        self.assertEqual(log_model._fields["source_record"].type, "reference")
+        model_record = self.env["ir.model"].sudo().search([("model", "=", "world.depot.api.log")], limit=1)
+        manager_acl = self.env["ir.model.access"].sudo().search([
+            ("model_id", "=", model_record.id),
+            ("group_id", "=", self.env.ref("stock.group_stock_manager").id),
+        ], limit=1)
+        self.assertTrue(manager_acl.perm_read)
+        self.assertFalse(manager_acl.perm_write)
+        self.assertFalse(manager_acl.perm_create)
+        self.assertFalse(manager_acl.perm_unlink)
+        ordinary_user = self.env["res.users"].with_context(no_reset_password=True).create({
+            "name": "Ginlong API log reader denied",
+            "login": "ginlong-log-denied-%s" % uuid.uuid4().hex,
+            "groups_id": [(6, 0, [self.env.ref("base.group_user").id])],
+        })
+        manager_user = self.env["res.users"].with_context(no_reset_password=True).create({
+            "name": "Ginlong API log manager",
+            "login": "ginlong-log-manager-%s" % uuid.uuid4().hex,
+            "groups_id": [(6, 0, [
+                self.env.ref("base.group_user").id,
+                self.env.ref("stock.group_stock_manager").id,
+            ])],
+        })
+        self.assertFalse(log_model.with_user(ordinary_user).check_access_rights("read", raise_exception=False))
+        self.assertTrue(log_model.with_user(manager_user).check_access_rights("read", raise_exception=False))
+
+        root_menu = self.env.ref("ginlong_apis.menu_ginlong_root")
+        self.assertEqual(root_menu.parent_id, self.env.ref("worlddepot.world_depot_logi_menu"))
+        self.assertEqual(self.env.ref("ginlong_apis.action_ginlong_inbound_orders").res_model, "world.depot.inbound.order")
+        self.assertEqual(self.env.ref("ginlong_apis.action_ginlong_outbound_orders").res_model, "world.depot.outbound.order")
+        self.assertEqual(self.env.ref("ginlong_apis.action_ginlong_stocktake_orders").res_model, "world.depot.stocktake.order")
+        self.assertEqual(self.env.ref("ginlong_apis.action_ginlong_products").res_model, "product.product")
+        self.assertEqual(self.env.ref("ginlong_apis.action_ginlong_settings").res_model, "res.config.settings")
+        logs_action = self.env.ref("ginlong_apis.action_ginlong_api_logs")
+        self.assertEqual(logs_action.res_model, "world.depot.api.log")
+        self.assertIn("/api/ginlong/", logs_action.domain)
+        self.assertIn("TPL_", logs_action.domain)
+        settings_view = self.env.ref("ginlong_apis.res_config_settings_view_form_ginlong_apis")
+        self.assertIn("Ginlong APIs", settings_view.arch_db)
+
+        order = self.env["world.depot.inbound.order"].browse(
+            services.api01(self.env, self.api_user, self._api01("GINLONG-API09-LOG-SOURCE"))["data"]["id"]
+        )
+        ginlong_callbacks._write_api_log(
+            order, "API02", "http://mock.invalid/API/WMS_JSON/TPL_Receipt_Confirmation",
+            {"inboundOrderNo": order.reference}, "{}", 500, "mock failure",
+        )
+        log = log_model.sudo().search([("source_record", "=", "%s,%s" % (order._name, order.id))], limit=1)
+        self.assertTrue(log)
+        self.assertFalse(log.success)
+        self.assertEqual(log.action_open_source_record()["res_model"], order._name)
+        self.assertEqual(log.action_open_source_record()["res_id"], order.id)
