@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="product_attribute_ginlong_owner" model="product.attribute">
+        <field name="name">Ginlong Owner</field>
+        <field name="create_variant">always</field>
+        <field name="sequence">1000</field>
+    </record>
+</odoo>

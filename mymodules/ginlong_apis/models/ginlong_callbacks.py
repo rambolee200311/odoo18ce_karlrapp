@@ -70,7 +70,7 @@ def _api04_payload(order):
             "productSN": line.lot_id.name,
             "quantity": line.quantity,
             "palletCode": package.name if package else False,
-            "productCode": line.product_id.default_code,
+            "productCode": line.product_id.ginlong_product_code,
             "operator": line.ginlong_operator_code,
             "operationTime": _operation_time(line.ginlong_operation_time, label),
         }
@@ -134,7 +134,7 @@ def _api06_payload(order):
             "productSN": line.lot_id.name,
             "quantity": line.quantity,
             "palletCode": line.package_id.name if line.package_id else False,
-            "productCode": line.product_id.default_code,
+            "productCode": line.product_id.ginlong_product_code,
             "operator": line.ginlong_operator_code,
             "operationTime": _operation_time(line.ginlong_operation_time, label),
         }
@@ -353,7 +353,7 @@ class OutboundOrder(models.Model):
         "ginlong_stock_picking_ids.ginlong_callback_selected",
         "ginlong_stock_picking_ids.move_line_ids.package_id",
         "ginlong_stock_picking_ids.move_line_ids.quantity",
-        "ginlong_stock_picking_ids.move_line_ids.product_id.ginlong_weight",
+        "ginlong_stock_picking_ids.move_line_ids.product_id.product_tmpl_id.ginlong_weight",
         "ginlong_pallet_qty_manual_enabled", "ginlong_pallet_qty_manual",
         "ginlong_gross_weight_manual_enabled", "ginlong_gross_weight_manual",
     )
@@ -368,7 +368,7 @@ class OutboundOrder(models.Model):
                 else order.ginlong_pallet_qty_auto
             )
             order.ginlong_total_net_weight = sum(
-                line.product_id.ginlong_weight * line.quantity for line in lines
+                line.product_id.product_tmpl_id.ginlong_weight * line.quantity for line in lines
             )
             order.ginlong_total_weight = (
                 order.ginlong_gross_weight_manual

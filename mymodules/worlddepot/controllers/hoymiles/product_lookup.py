@@ -18,6 +18,34 @@ def _resolve_product(env, product_code, project=False):
     product_model = env["product.product"].sudo()
     owner_code = getattr(getattr(project, "owner", False), "ginlong_owner_code", False)
 
+    if "ginlong_product_code" in product_model._fields:
+        if owner_code:
+            owner_products = product_model.search([
+                ("ginlong_product_code", "=", product_code),
+                ("ginlong_owner_code", "=", owner_code),
+            ], limit=2)
+            if len(owner_products) == 1:
+                return owner_products
+            if len(owner_products) > 1:
+                raise ValueError(
+                    "Ginlong product code %s is ambiguous for owner %s" % (product_code, owner_code)
+                )
+            if product_model.search([("ginlong_product_code", "=", product_code)], limit=1):
+                raise ValueError(
+                    "Ginlong product code %s was not found for owner %s" % (product_code, owner_code)
+                )
+        else:
+            ginlong_products = product_model.search([
+                ("ginlong_product_code", "=", product_code),
+            ], limit=2)
+            if ginlong_products:
+                if len(ginlong_products) > 1:
+                    raise ValueError(
+                        "Ginlong product code %s is ambiguous; configure the project owner's Ginlong owner code "
+                        "to identify the correct product" % product_code
+                    )
+                return ginlong_products
+
     code_products = product_model.search([("default_code", "=", product_code)], limit=3)
     if len(code_products) > 1:
         if owner_code and "ginlong_owner_code" in product_model._fields:

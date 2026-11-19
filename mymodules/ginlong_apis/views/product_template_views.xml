@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_product_template_form_ginlong" model="ir.ui.view">
+        <field name="name">product.template.form.ginlong</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='general_information']" position="after">
+                <page string="Ginlong 物料属性" name="ginlong_product_data" groups="stock.group_stock_manager">
+                    <group>
+                        <group string="物料属性">
+                            <field name="ginlong_specification_model"/>
+                            <field name="ginlong_unit"/>
+                            <field name="ginlong_power"/>
+                            <field name="ginlong_national_standard"/>
+                            <field name="ginlong_certification_model"/>
+                            <field name="ginlong_product_form"/>
+                            <field name="tracking"/>
+                        </group>
+                        <group string="尺寸与重量">
+                            <field name="ginlong_weight"/>
+                            <field name="ginlong_length"/>
+                            <field name="ginlong_width"/>
+                            <field name="ginlong_height"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_product_product_form_ginlong" model="ir.ui.view">
+        <field name="name">product.product.form.ginlong.identity</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_normal_form_view"/>
+        <field name="arch" type="xml">
+            <field name="default_code" position="after">
+                <field name="ginlong_owner_code" groups="stock.group_stock_manager"/>
+                <field name="ginlong_product_code" groups="stock.group_stock_manager"/>
+            </field>
+        </field>
+    </record>
+</odoo>

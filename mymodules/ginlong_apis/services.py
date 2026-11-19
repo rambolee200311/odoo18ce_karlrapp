@@ -7,9 +7,11 @@ idempotency fingerprint is computed.
 
 import json
 
-from odoo import fields
+from odoo import Command, fields
 from odoo.exceptions import ValidationError
-from odoo.tools.float_utils import float_round
+from odoo.tools.float_utils import float_compare, float_round
+
+from .product_identity import ginlong_internal_code
 
 
 _INBOUND_ACTIONS = {
@@ -122,7 +124,7 @@ def _find_product(env, product_code, owner_code=None):
     product_model = env["product.product"].sudo()
     if owner_code:
         products = product_model.search([
-            ("default_code", "=", product_code),
+            ("ginlong_product_code", "=", product_code),
             ("ginlong_owner_code", "=", owner_code),
         ], limit=2)
         if len(products) == 1:
@@ -280,12 +282,12 @@ def api03(env, api_user, payload):
         for existing_line in order.outbound_order_product_ids:
             existing_product = existing_line.product_id
             matched_product = _find_product(
-                env, existing_product.default_code, payload["owner"],
+                env, existing_product.ginlong_product_code, payload["owner"],
             )
             if matched_product != existing_product:
                 raise ValidationError(
                     "Existing product %s on outbound order %s does not match Ginlong owner %s"
-                    % (existing_product.default_code, payload["outboundOrderNo"], payload["owner"])
+                    % (existing_product.ginlong_product_code, payload["outboundOrderNo"], payload["owner"])
                 )
     customer_name = payload.get("customer")
     if action == "CREATE" and not customer_name:
@@ -433,56 +435,149 @@ def api05(env, api_user, payload):
 
 
 def api07(env, api_user, payload):
-    """Upsert product fields on native Odoo product models."""
+    """Upsert one shared product template and one owner-specific native variant."""
     _required(payload, ["action", "owner", "productCode", "productName", "specificationModel", "unit", "productForm"], "API07")
     _inbound_action("API07", payload)
     _project(api_user)
+    owner_code = payload["owner"]
     code = payload["productCode"]
-    products = env["product.product"].sudo().search([
-        ("default_code", "=", code),
-        ("ginlong_owner_code", "=", payload["owner"]),
-    ], limit=2)
-    if len(products) > 1:
-        raise ValidationError("Owner/product key %s/%s is ambiguous in the existing WMS product data" % (payload["owner"], code))
+    product_form = payload["productForm"].strip() if isinstance(payload["productForm"], str) else payload["productForm"]
+    tracking_by_form = {"原材料": "none", "半成品": "serial", "成品": "serial"}
+    if product_form not in tracking_by_form:
+        raise ValidationError("API07 productForm must be one of: 原材料, 半成品, 成品")
+
     units = env["uom.uom"].sudo().search([("name", "=", payload["unit"])], limit=2)
     if len(units) != 1:
         reason = "not found" if not units else "ambiguous"
         raise ValidationError("Unit %s is %s in the existing Odoo units of measure" % (payload["unit"], reason))
 
-    if products:
-        product = products
-        template = product.product_tmpl_id
-        template.write({"name": payload["productName"], "uom_id": units.id, "uom_po_id": units.id})
-        product.write({"default_code": code})
-    else:
-        template = env["product.template"].sudo().create({
-            "name": payload["productName"],
-            "uom_id": units.id,
-            "uom_po_id": units.id,
-        })
-        product = template.product_variant_id
-        product.write({"default_code": code})
-
-    values = {
-        "ginlong_owner_code": payload["owner"],
+    template_values = {
+        "name": payload["productName"],
+        "type": "consu",
+        "is_storable": True,
+        "uom_id": units.id,
+        "uom_po_id": units.id,
         "ginlong_specification_model": payload["specificationModel"],
         "ginlong_unit": payload["unit"],
-        "ginlong_product_form": payload["productForm"],
+        "ginlong_product_form": product_form,
+        "tracking": tracking_by_form[product_form],
     }
-    source_fields = {
-        "power": "ginlong_power",
-        "nationalStandard": "ginlong_national_standard",
-        "certificationModel": "ginlong_certification_model",
-        "weight": "ginlong_weight",
-        "length": "ginlong_length",
-        "width": "ginlong_width",
-        "height": "ginlong_height",
+    payload_fields = {
+        "power": ("ginlong_power", "char"),
+        "nationalStandard": ("ginlong_national_standard", "char"),
+        "certificationModel": ("ginlong_certification_model", "char"),
+        "weight": ("ginlong_weight", "float"),
+        "length": ("ginlong_length", "float"),
+        "width": ("ginlong_width", "float"),
+        "height": ("ginlong_height", "float"),
     }
-    for source_name, target_name in source_fields.items():
+    for source_name, (target_name, value_type) in payload_fields.items():
         if source_name in payload and payload[source_name] is not None:
-            values[target_name] = _number(payload[source_name], "API07.%s" % source_name) if source_name in {"weight", "length", "width", "height"} else payload[source_name]
-    product.write(values)
-    return {"success": True, "data": {"id": product.id, "productCode": product.default_code}}
+            value = payload[source_name]
+            if value_type == "float":
+                value = _number(value, "API07.%s" % source_name)
+            elif value_type == "char":
+                value = str(value)
+            template_values[target_name] = value
+
+    product_model = env["product.product"].sudo().with_context(active_test=False)
+    matching_products = product_model.search([("ginlong_product_code", "=", code)])
+    templates = matching_products.mapped("product_tmpl_id")
+    if len(templates) > 1:
+        raise ValidationError("Ginlong productCode %s belongs to multiple product templates" % code)
+
+    internal_code = ginlong_internal_code(owner_code, code)
+    code_collisions = product_model.search([("default_code", "=", internal_code)])
+    if code_collisions and any(
+        product.ginlong_owner_code != owner_code or product.ginlong_product_code != code
+        for product in code_collisions
+    ):
+        raise ValidationError("Internal Ginlong product code collision for owner/product %s/%s" % (owner_code, code))
+
+    if templates:
+        template = templates
+        mismatches = []
+        for field_name, expected in template_values.items():
+            actual = template[field_name]
+            if field_name in {"ginlong_weight", "ginlong_length", "ginlong_width", "ginlong_height"}:
+                differs = float_compare(float(actual or 0.0), float(expected or 0.0), precision_digits=6) != 0
+            elif field_name in {"uom_id", "uom_po_id"}:
+                differs = actual.id != expected
+            else:
+                differs = actual != expected
+            if differs:
+                mismatches.append(field_name)
+        if mismatches:
+            raise ValidationError(
+                "Ginlong productCode %s conflicts with shared product fields: %s"
+                % (code, ", ".join(mismatches))
+            )
+    else:
+        template = False
+
+    owner_products = product_model.search([
+        ("ginlong_owner_code", "=", owner_code),
+        ("ginlong_product_code", "=", code),
+    ], limit=2)
+    if len(owner_products) > 1:
+        raise ValidationError("Owner/product key %s/%s is ambiguous in the existing WMS product data" % (owner_code, code))
+
+    owner_attribute = env.ref("ginlong_apis.product_attribute_ginlong_owner").sudo()
+    attribute_values = env["product.attribute.value"].sudo().search([
+        ("attribute_id", "=", owner_attribute.id), ("name", "=", owner_code),
+    ], limit=1)
+    if not attribute_values:
+        attribute_values = env["product.attribute.value"].sudo().create({
+            "attribute_id": owner_attribute.id,
+            "name": owner_code,
+        })
+
+    if not template:
+        template = env["product.template"].sudo().create({
+            **template_values,
+            "attribute_line_ids": [Command.create({
+                "attribute_id": owner_attribute.id,
+                "value_ids": [Command.set(attribute_values.ids)],
+            })],
+        })
+    else:
+        non_owner_lines = template.attribute_line_ids.filtered(
+            lambda line: line.attribute_id != owner_attribute
+        )
+        if non_owner_lines:
+            raise ValidationError(
+                "Ginlong productCode %s already has non-owner product variants; "
+                "owner identity cannot be resolved to one product variant." % code
+            )
+        owner_line = template.attribute_line_ids.filtered(lambda line: line.attribute_id == owner_attribute)
+        if owner_line:
+            owner_line.write({"value_ids": [Command.link(attribute_values.id)]})
+        else:
+            env["product.template.attribute.line"].sudo().create({
+                "product_tmpl_id": template.id,
+                "attribute_id": owner_attribute.id,
+                "value_ids": [Command.set(attribute_values.ids)],
+            })
+
+    owner_ptavs = template.attribute_line_ids.filtered(
+        lambda line: line.attribute_id == owner_attribute
+    ).product_template_value_ids.filtered(
+        lambda value: value.product_attribute_value_id == attribute_values
+    )
+    products = template.product_variant_ids.filtered(
+        lambda product: bool(product.product_template_attribute_value_ids & owner_ptavs)
+    )
+    if len(products) != 1:
+        raise ValidationError("Ginlong owner %s does not resolve to exactly one product variant for %s" % (owner_code, code))
+    product = products
+    if owner_products and owner_products != product:
+        raise ValidationError("Owner/product key %s/%s does not match its native product variant" % (owner_code, code))
+    product.write({
+        "ginlong_owner_code": owner_code,
+        "ginlong_product_code": code,
+        "default_code": internal_code,
+    })
+    return {"success": True, "data": {"id": product.id, "productCode": code}}
 
 
 def api09(env, payload):
@@ -527,15 +622,17 @@ def api09(env, payload):
         ("location_id", "child_of", warehouse.view_location_id.id),
         ("location_id.usage", "=", "internal"),
         ("owner_id", "=", owners.id),
-        ("product_id.default_code", "!=", False),
+        ("product_id.ginlong_product_code", "!=", False),
     ]
     grouped = quant_model._read_group(domain, ["product_id"], ["quantity:sum"])
+    quantities_by_code = {}
+    for product, quantity in grouped:
+        quantities_by_code[product.ginlong_product_code] = (
+            quantities_by_code.get(product.ginlong_product_code, 0.0) + quantity
+        )
     inventory = [
-        {
-            "productCode": product.default_code,
-            "quantity": float_round(quantity, precision_digits=6),
-        }
-        for product, quantity in grouped
+        {"productCode": product_code, "quantity": float_round(quantity, precision_digits=6)}
+        for product_code, quantity in quantities_by_code.items()
     ]
     inventory.sort(key=lambda row: row["productCode"])
     return {

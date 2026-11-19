@@ -18,6 +18,7 @@ from odoo.addons.ginlong_apis.controllers import ginlong_controller
 from odoo.addons.worlddepot.controllers import api_logs, validator_token
 from odoo.addons.worlddepot.controllers.hoymiles.product_lookup import _resolve_product
 from odoo.addons.ginlong_apis import idempotency, rate_limiter
+from odoo.addons.ginlong_apis.product_identity import ginlong_internal_code
 
 
 class _CursorContext:
@@ -68,12 +69,6 @@ class TestGinlongAPI(TransactionCase):
             "warehouse": cls.warehouse.id,
             "is_check_origin_doc": False,
         })
-        cls.product = cls.env["product.product"].create({
-            "name": "Ginlong API test product",
-            "default_code": "GINLONG-API-TEST-001",
-            "ginlong_owner_code": "OWNER-01",
-            "type": "consu",
-        })
         cls.recipient = cls.env["res.partner"].create({
             "name": "Ginlong API test recipient",
             "is_company": True,
@@ -83,6 +78,13 @@ class TestGinlongAPI(TransactionCase):
             "user_id": cls.env.ref("base.user_admin").id,
             "project": cls.project.id,
         })
+        product_result = services.api07(cls.env, cls.api_user, {
+            "action": "Add", "owner": "OWNER-01", "productCode": "GINLONG-API-TEST-001",
+            "productName": "Ginlong API test product", "specificationModel": "GL-MODEL-1",
+            "unit": cls.env.ref("uom.product_uom_unit").name,
+            "productForm": "成品", "power": "5kW", "weight": 2.5,
+        })
+        cls.product = cls.env["product.product"].browse(product_result["data"]["id"])
 
     def _cleanup_idempotency_probe(self, business_key, partner_name):
         with self._new_committed_cursor(self.env.cr.dbname) as cr:
@@ -337,7 +339,7 @@ class TestGinlongAPI(TransactionCase):
             "businessType": "STANDARD",
             "remark": "inbound local simulation",
             "details": [{
-                "productCode": self.product.default_code,
+                "productCode": self.product.ginlong_product_code,
                 "name": "Ginlong module name",
                 "specificationModel": "GL-MODEL-1",
                 "quantity": 12,
@@ -346,7 +348,7 @@ class TestGinlongAPI(TransactionCase):
                 "productSN": "GL-SN-0001",
                 "quantity": 1,
                 "palletCode": "GL-PALLET-01",
-                "productCode": self.product.default_code,
+                "productCode": self.product.ginlong_product_code,
                 "productName": "Ginlong module name",
                 "specificationModel": "GL-MODEL-1",
             }],
@@ -367,7 +369,7 @@ class TestGinlongAPI(TransactionCase):
             "contactEmail": "contact@example.invalid",
             "shippingMethod": "EXTERNAL-RAW-VALUE",
             "details": [{
-                "productCode": self.product.default_code,
+                "productCode": self.product.ginlong_product_code,
                 "productName": "Ginlong module name",
                 "specificationModel": "GL-MODEL-1",
                 "quantity": 8,
@@ -396,6 +398,7 @@ class TestGinlongAPI(TransactionCase):
         product = self.env["product.product"].create({
             "name": "Actual callback product %s" % suffix,
             "default_code": "GINLONG-CB-%s" % suffix,
+            "ginlong_product_code": "GINLONG-CB-%s" % suffix,
             "type": "consu",
             "tracking": "serial",
         })
@@ -456,7 +459,7 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(serial.quantity, 1)
         self.assertEqual(serial.ginlong_quantity, 1)
         self.assertEqual(serial.ginlong_pallet_code, "GL-PALLET-01")
-        self.assertEqual(serial.ginlong_product_code, self.product.default_code)
+        self.assertEqual(serial.ginlong_product_code, self.product.ginlong_product_code)
         self.assertEqual(serial.ginlong_product_name, "Ginlong module name")
         self.assertEqual(serial.ginlong_specification_model, "GL-MODEL-1")
         self.assertFalse(order.stock_picking_id)
@@ -483,8 +486,9 @@ class TestGinlongAPI(TransactionCase):
         product_code = "GINLONG-API01-AUTO-OWNER-PRODUCT"
         product = self.env["product.product"].create({
             "name": "Ginlong API01 auto-owner product",
-            "default_code": product_code,
+            "default_code": ginlong_internal_code(owner_code, product_code),
             "ginlong_owner_code": owner_code,
+            "ginlong_product_code": product_code,
             "type": "consu",
         })
         first_payload = self._api01("GINLONG-IN-AUTO-OWNER-1")
@@ -590,7 +594,7 @@ class TestGinlongAPI(TransactionCase):
             ("reference", "=", "GINLONG-OUT-MISSING-OWNER-PRODUCT"),
         ]))
         self.assertFalse(self.env["product.product"].search([
-            ("default_code", "=", self.product.default_code),
+            ("ginlong_product_code", "=", self.product.ginlong_product_code),
             ("ginlong_owner_code", "=", other_owner.ginlong_owner_code),
         ]))
 
@@ -673,14 +677,14 @@ class TestGinlongAPI(TransactionCase):
             "owner": "OWNER-01", "action": "Add", "countOrderNo": "COUNT-001",
             "warehouse": "WH-01", "remark": "count local simulation",
             "details": [{
-                "productCode": self.product.default_code,
+                "productCode": self.product.ginlong_product_code,
                 "productName": "Ginlong module name",
                 "specificationModel": "GL-MODEL-1",
                 "quantity": 12,
             }],
             "snList": [{
                 "productSN": "GL-SN-COUNT-01", "quantity": 1, "palletCode": "GL-PALLET-01",
-                "productCode": self.product.default_code, "productName": "Ginlong module name",
+                "productCode": self.product.ginlong_product_code, "productName": "Ginlong module name",
                 "specificationModel": "GL-MODEL-1",
             }],
         }
@@ -698,7 +702,7 @@ class TestGinlongAPI(TransactionCase):
         actual = self.env["world.depot.stocktake.result"].create({
             "order_id": task.id,
             "product_id": self.product.id,
-            "product_code": self.product.default_code,
+            "product_code": self.product.ginlong_product_code,
             "product_name": self.product.name,
             "specification_model": "GL-MODEL-1",
             "serial_number": "GL-SN-ACTUAL-01",
@@ -730,43 +734,66 @@ class TestGinlongAPI(TransactionCase):
         payload = {
             "action": "Add", "owner": "OWNER-01", "productCode": "GINLONG-API07-001",
             "productName": "Ginlong API07 product", "specificationModel": "MODEL-07",
-            "unit": unit.name, "productForm": "INVERTER", "power": "5kW",
+            "unit": unit.name, "productForm": "成品", "power": "5kW",
             "nationalStandard": "STD-7", "certificationModel": "CERT-7",
             "weight": 7.5, "length": 400, "width": 300, "height": 200,
         }
         created = services.api07(self.env, self.api_user, payload)
         product = self.env["product.product"].browse(created["data"]["id"])
-        self.assertEqual(product.default_code, "GINLONG-API07-001")
+        self.assertEqual(created["data"]["productCode"], "GINLONG-API07-001")
+        self.assertEqual(product.ginlong_product_code, "GINLONG-API07-001")
+        self.assertEqual(product.default_code, ginlong_internal_code("OWNER-01", "GINLONG-API07-001"))
         self.assertEqual(product.name, "Ginlong API07 product")
         self.assertEqual(product.ginlong_owner_code, "OWNER-01")
-        self.assertEqual(product.ginlong_specification_model, "MODEL-07")
-        self.assertEqual(product.ginlong_unit, unit.name)
-        self.assertEqual(product.ginlong_power, "5kW")
-        self.assertEqual(product.ginlong_national_standard, "STD-7")
-        self.assertEqual(product.ginlong_certification_model, "CERT-7")
-        self.assertEqual(product.ginlong_product_form, "INVERTER")
-        self.assertEqual(product.ginlong_weight, 7.5)
-        self.assertEqual(product.ginlong_length, 400)
-        self.assertEqual(product.ginlong_width, 300)
-        self.assertEqual(product.ginlong_height, 200)
+        template = product.product_tmpl_id
+        self.assertEqual(template.ginlong_specification_model, "MODEL-07")
+        self.assertEqual(template.ginlong_unit, unit.name)
+        self.assertEqual(template.ginlong_power, "5kW")
+        self.assertEqual(template.ginlong_national_standard, "STD-7")
+        self.assertEqual(template.ginlong_certification_model, "CERT-7")
+        self.assertEqual(template.ginlong_product_form, "成品")
+        self.assertEqual(template.tracking, "serial")
+        self.assertTrue(template.is_storable)
+        self.assertEqual(template.ginlong_weight, 7.5)
+        self.assertEqual(template.ginlong_length, 400)
+        self.assertEqual(template.ginlong_width, 300)
+        self.assertEqual(template.ginlong_height, 200)
 
-        payload.update({"action": "Edit", "productName": "Ginlong API07 product updated", "power": "6kW"})
+        payload.update({"action": "Edit"})
         updated = services.api07(self.env, self.api_user, payload)
         self.assertEqual(updated["data"]["id"], product.id)
-        self.assertEqual(product.name, "Ginlong API07 product updated")
-        self.assertEqual(product.ginlong_power, "6kW")
+        self.assertEqual(template.name, "Ginlong API07 product")
 
         other_owner_payload = dict(payload, owner="OWNER-02")
         other_created = services.api07(self.env, self.api_user, other_owner_payload)
         other_product = self.env["product.product"].browse(other_created["data"]["id"])
         self.assertNotEqual(other_product, product)
-        self.assertEqual(other_product.default_code, product.default_code)
+        self.assertEqual(other_product.product_tmpl_id, template)
+        self.assertEqual(other_product.ginlong_product_code, product.ginlong_product_code)
+        self.assertEqual(other_product.default_code, ginlong_internal_code("OWNER-02", "GINLONG-API07-001"))
+        self.assertNotEqual(other_product.default_code, product.default_code)
         self.assertEqual(other_product.ginlong_owner_code, "OWNER-02")
+        self.assertEqual(len(template.product_variant_ids), 2)
+        self.assertEqual(set(template.attribute_line_ids.mapped("value_ids.name")), {"OWNER-01", "OWNER-02"})
 
         other_owner_payload.update({"action": "Edit", "productName": "Owner 2 product updated"})
-        other_updated = services.api07(self.env, self.api_user, other_owner_payload)
-        self.assertEqual(other_updated["data"]["id"], other_product.id)
-        self.assertEqual(product.name, "Ginlong API07 product updated")
+        with self.assertRaisesRegex(ValidationError, "shared product fields: name"):
+            services.api07(self.env, self.api_user, other_owner_payload)
+        self.assertEqual(template.name, "Ginlong API07 product")
+        self.assertEqual(other_product.ginlong_owner_code, "OWNER-02")
+
+        conflicting_form = dict(payload, productForm="原材料")
+        with self.assertRaisesRegex(ValidationError, "shared product fields: ginlong_product_form, tracking"):
+            services.api07(self.env, self.api_user, conflicting_form)
+        self.assertEqual(template.ginlong_product_form, "成品")
+        self.assertEqual(template.tracking, "serial")
+
+        invalid_form = dict(payload, productCode="GINLONG-API07-INVALID-FORM", productForm="包装物")
+        with self.assertRaisesRegex(ValidationError, "productForm must be one of"):
+            services.api07(self.env, self.api_user, invalid_form)
+        self.assertFalse(self.env["product.product"].search([
+            ("ginlong_product_code", "=", "GINLONG-API07-INVALID-FORM"),
+        ]))
 
         owner2 = self.env["res.partner"].create({
             "name": "Ginlong API test owner 2", "is_company": True,
@@ -777,18 +804,18 @@ class TestGinlongAPI(TransactionCase):
             "category": self.env.ref("product.product_category_all").id,
             "warehouse": self.warehouse.id, "is_check_origin_doc": False,
         })
-        self.assertEqual(_resolve_product(self.env, product.default_code, self.project), product)
-        self.assertEqual(_resolve_product(self.env, product.default_code, project2), other_product)
+        self.assertEqual(_resolve_product(self.env, product.ginlong_product_code, self.project), product)
+        self.assertEqual(_resolve_product(self.env, product.ginlong_product_code, project2), other_product)
 
         project2.owner.ginlong_owner_code = False
         with self.assertRaisesRegex(ValueError, "ambiguous"):
-            _resolve_product(self.env, product.default_code, project2)
+            _resolve_product(self.env, product.ginlong_product_code, project2)
         project2.owner.ginlong_owner_code = "OWNER-02"
 
         api01_payload = self._api01("GINLONG-IN-OWNER-02")
         api01_payload["owner"] = "OWNER-02"
-        api01_payload["details"][0]["productCode"] = product.default_code
-        api01_payload["snList"][0]["productCode"] = product.default_code
+        api01_payload["details"][0]["productCode"] = product.ginlong_product_code
+        api01_payload["snList"][0]["productCode"] = product.ginlong_product_code
         inbound_result = services.api01(self.env, self.api_user, api01_payload)
         inbound = self.env["world.depot.inbound.order"].browse(inbound_result["data"]["id"])
         self.assertEqual(inbound.ginlong_owner_id, owner2)
@@ -799,11 +826,48 @@ class TestGinlongAPI(TransactionCase):
 
         api03_payload = self._api03("GINLONG-OUT-OWNER-02")
         api03_payload["owner"] = "OWNER-02"
-        api03_payload["details"][0]["productCode"] = product.default_code
+        api03_payload["details"][0]["productCode"] = product.ginlong_product_code
         outbound_result = services.api03(self.env, self.api_user, api03_payload)
         outbound = self.env["world.depot.outbound.order"].browse(outbound_result["data"]["id"])
         self.assertEqual(outbound.ginlong_owner_id, owner2)
         self.assertEqual(outbound.outbound_order_product_ids[0].product_id, other_product)
+
+    def test_api07_product_form_sets_template_sn_tracking_and_rejects_other_values(self):
+        unit = self.env.ref("uom.product_uom_unit")
+        for product_form, tracking in (("原材料", "none"), ("半成品", "serial"), ("成品", "serial")):
+            result = services.api07(self.env, self.api_user, {
+                "action": "Add", "owner": "OWNER-01", "productCode": "FORM-%s" % product_form,
+                "productName": "Product form %s" % product_form,
+                "specificationModel": "FORM-MODEL", "unit": unit.name,
+                "productForm": product_form,
+            })
+            product = self.env["product.product"].browse(result["data"]["id"])
+            self.assertEqual(product.product_tmpl_id.tracking, tracking)
+            self.assertEqual(product.product_tmpl_id.ginlong_product_form, product_form)
+
+    def test_existing_ginlong_product_identity_is_owner_variant_and_raw_code_is_preserved(self):
+        owner_attribute = self.env.ref("ginlong_apis.product_attribute_ginlong_owner")
+        products = self.env["product.product"].with_context(active_test=False).search([
+            ("ginlong_owner_code", "!=", False),
+        ])
+        self.assertTrue(products)
+        for product in products:
+            with self.subTest(product=product.id):
+                self.assertTrue(product.ginlong_product_code)
+                self.assertEqual(
+                    product.default_code,
+                    ginlong_internal_code(product.ginlong_owner_code, product.ginlong_product_code),
+                )
+                owner_line = product.product_tmpl_id.attribute_line_ids.filtered(
+                    lambda line: line.attribute_id == owner_attribute
+                )
+                self.assertEqual(len(owner_line), 1)
+                owner_value = owner_line.value_ids.filtered(lambda value: value.name == product.ginlong_owner_code)
+                self.assertEqual(len(owner_value), 1)
+                product_ptavs = product.product_template_attribute_value_ids.filtered(
+                    lambda value: value.product_attribute_value_id == owner_value
+                )
+                self.assertEqual(len(product_ptavs), 1)
 
     def test_api02_receipt_details_persist_actual_inbound_data(self):
         result = services.api01(self.env, self.api_user, self._api01("GINLONG-RECEIPT-DETAIL"))
@@ -853,7 +917,7 @@ class TestGinlongAPI(TransactionCase):
         result = services.api03(self.env, self.api_user, self._api03("GINLONG-API06-TOTALS"))
         order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
         picking, product = self._create_actual_picking(order, incoming=False, suffix="API06-TOTALS")
-        product.write({"weight": 1.5, "ginlong_weight": 2.5})
+        product.product_tmpl_id.write({"weight": 1.5, "ginlong_weight": 2.5})
         line = picking.move_line_ids
         source_package = self.env["stock.quant.package"].create({"name": "API06-SOURCE-PALLET"})
         result_package = self.env["stock.quant.package"].create({"name": "API06-RESULT-PACKAGE"})
@@ -945,7 +1009,7 @@ class TestGinlongAPI(TransactionCase):
         created = services.api05(self.env, self.api_user, {
             "owner": "OWNER-01", "action": "Add", "countOrderNo": "COUNT-UPDATE",
             "warehouse": "WH-01", "details": [{
-                "productCode": self.product.default_code, "productName": "Before",
+                "productCode": self.product.ginlong_product_code, "productName": "Before",
                 "specificationModel": "MODEL", "quantity": 3,
             }], "snList": [],
         })
@@ -1122,7 +1186,7 @@ class TestGinlongAPI(TransactionCase):
         params.set_param("ginlong_apis.api06_callback_url", endpoint_06)
         params.set_param("ginlong_apis.api08_callback_url", endpoint_08)
         picking, product = self._create_actual_picking(order, incoming=False, suffix="API06-08-PAYLOAD")
-        product.ginlong_weight = 1.25
+        product.product_tmpl_id.ginlong_weight = 1.25
         line = picking.move_line_ids
         line.write({
             "package_id": line.result_package_id.id,
@@ -1206,7 +1270,7 @@ class TestGinlongAPI(TransactionCase):
             "productSN": "ACTUAL-SN-API04-SAVED",
             "quantity": 2,
             "palletCode": "ACTUAL-PALLET-API04-SAVED",
-            "productCode": product.default_code,
+            "productCode": product.ginlong_product_code,
             "operator": "actual.worker",
             "operationTime": fields.Datetime.to_string(operation_time),
         }])
@@ -1275,7 +1339,7 @@ class TestGinlongAPI(TransactionCase):
         result_one = self.env["world.depot.stocktake.result"].create({
             "order_id": order.id,
             "product_id": self.product.id,
-            "product_code": self.product.default_code,
+            "product_code": self.product.ginlong_product_code,
             "product_name": self.product.name,
             "serial_number": "COUNT-SN-001",
             "quantity": 1,
@@ -1288,7 +1352,7 @@ class TestGinlongAPI(TransactionCase):
         result_two = self.env["world.depot.stocktake.result"].create({
             "order_id": order.id,
             "product_id": self.product.id,
-            "product_code": self.product.default_code,
+            "product_code": self.product.ginlong_product_code,
             "product_name": self.product.name,
             "serial_number": "COUNT-SN-002",
             "quantity": 1,
@@ -1667,16 +1731,18 @@ class TestGinlongAPI(TransactionCase):
         })
         other_owner_product = self.env["product.product"].create({
             "name": "Ginlong API09 same-code second owner",
-            "default_code": self.product.default_code,
+            "default_code": ginlong_internal_code("OWNER-02", self.product.ginlong_product_code),
             "ginlong_owner_code": "OWNER-02",
+            "ginlong_product_code": self.product.ginlong_product_code,
             "type": "consu",
         })
         self.product.product_tmpl_id.is_storable = True
         other_owner_product.product_tmpl_id.is_storable = True
         second_product_same_owner = self.env["product.product"].create({
             "name": "Ginlong API09 second item same owner",
-            "default_code": "GINLONG-API09-SECOND-001",
+            "default_code": ginlong_internal_code("OWNER-01", "GINLONG-API09-SECOND-001"),
             "ginlong_owner_code": "OWNER-01",
+            "ginlong_product_code": "GINLONG-API09-SECOND-001",
             "type": "consu",
         })
         second_product_same_owner.product_tmpl_id.is_storable = True
@@ -1732,14 +1798,103 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(owner_one["owner"], "OWNER-01")
         self.assertEqual(owner_one["warehouse"], self.warehouse.code)
         self.assertEqual(owner_one["inventoryList"], [
-            {"productCode": self.product.default_code, "quantity": 5.75},
-            {"productCode": second_product_same_owner.default_code, "quantity": 7.13},
+            {"productCode": self.product.ginlong_product_code, "quantity": 5.75},
+            {"productCode": second_product_same_owner.ginlong_product_code, "quantity": 7.13},
         ])
         self.assertTrue(all(isinstance(row["quantity"], float) for row in owner_one["inventoryList"]))
-        self.assertEqual(owner_two["inventoryList"], [{"productCode": self.product.default_code, "quantity": 9.75}])
+        self.assertEqual(owner_two["inventoryList"], [{"productCode": self.product.ginlong_product_code, "quantity": 9.75}])
         self.assertEqual(empty_owner["inventoryList"], [])
         self.assertEqual(before_quants, after_quants)
         self.assertEqual(before_moves, self.env["stock.move"].sudo().search_count([]))
+
+    def test_cc005_api09_reads_inventory_from_completed_standard_pickings(self):
+        """CC-005 stock fixture: all test quantities enter through Odoo receipts."""
+        owner_b = self.env["res.partner"].create({
+            "name": "Ginlong CC005 owner B",
+            "is_company": True,
+            "ginlong_owner_code": "CC005-OWNER-B",
+        })
+
+        def api07_product(owner_code, code, name):
+            result = services.api07(self.env, self.api_user, {
+                "action": "Add",
+                "owner": owner_code,
+                "productCode": code,
+                "productName": name,
+                "specificationModel": "CC005-MODEL",
+                "unit": self.env.ref("uom.product_uom_unit").name,
+                "productForm": "原材料",
+                "weight": 1,
+            })
+            return self.env["product.product"].browse(result["data"]["id"])
+
+        product_a1 = api07_product("OWNER-01", "CC005-P001", "CC005 product 1")
+        product_b1 = api07_product("CC005-OWNER-B", "CC005-P001", "CC005 product 1")
+        product_a2 = api07_product("OWNER-01", "CC005-P002", "CC005 product 2 owner A")
+        products = (
+            (self.owner, product_a1, 100),
+            (owner_b, product_b1, 300),
+            (self.owner, product_a2, 200),
+        )
+        self.assertEqual(product_a1.product_tmpl_id, product_b1.product_tmpl_id)
+        self.assertNotEqual(product_a1, product_b1)
+        self.assertTrue(all(product.product_tmpl_id.is_storable for _owner, product, _qty in products))
+
+        before_picking_ids = set(self.env["stock.picking"].search([]).ids)
+        for owner, product, quantity in products:
+            picking = self.env["stock.picking"].create({
+                "picking_type_id": self.warehouse.in_type_id.id,
+                "location_id": self.warehouse.in_type_id.default_location_src_id.id,
+                "location_dest_id": self.warehouse.lot_stock_id.id,
+                "move_ids": [(0, 0, {
+                    "name": "Ginlong CC005 receipt %s" % product.ginlong_product_code,
+                    "product_id": product.id,
+                    "product_uom_qty": quantity,
+                    "product_uom": product.uom_id.id,
+                    "location_id": self.warehouse.in_type_id.default_location_src_id.id,
+                    "location_dest_id": self.warehouse.lot_stock_id.id,
+                })],
+            })
+            picking.action_confirm()
+            lines = picking.move_line_ids
+            self.assertTrue(lines, "Standard receipt confirmation must create detailed operations")
+            lines.write({"quantity": quantity, "owner_id": owner.id})
+            picking.move_ids.picked = True
+            picking.button_validate()
+            self.assertEqual(picking.state, "done")
+
+        created_pickings = self.env["stock.picking"].search([]).filtered(
+            lambda picking: picking.id not in before_picking_ids
+        )
+        self.assertEqual(len(created_pickings), 3)
+        internal_locations = self.env["stock.location"].search([
+            ("id", "child_of", self.warehouse.view_location_id.id),
+            ("usage", "=", "internal"),
+        ])
+        relevant_quants = self.env["stock.quant"].search([
+            ("product_id", "in", (product_a1 | product_b1 | product_a2).ids),
+            ("location_id", "in", internal_locations.ids),
+        ])
+        before_query_quants = relevant_quants.read(["quantity", "reserved_quantity", "write_date"])
+        before_query_moves = self.env["stock.move"].search_count([
+            ("product_id", "in", (product_a1 | product_b1 | product_a2).ids),
+        ])
+        result_a = services.api09(self.env, {"owner": "OWNER-01", "warehouse": self.warehouse.code})
+        result_b = services.api09(self.env, {"owner": "CC005-OWNER-B", "warehouse": self.warehouse.code})
+        self.assertEqual(result_a["inventoryList"], [
+            {"productCode": "CC005-P001", "quantity": 100.0},
+            {"productCode": "CC005-P002", "quantity": 200.0},
+        ])
+        self.assertEqual(result_b["inventoryList"], [
+            {"productCode": "CC005-P001", "quantity": 300.0},
+        ])
+        self.assertEqual(set(created_pickings.mapped("state")), {"done"})
+        after_query_quants = relevant_quants.read(["quantity", "reserved_quantity", "write_date"])
+        after_query_moves = self.env["stock.move"].search_count([
+            ("product_id", "in", (product_a1 | product_b1 | product_a2).ids),
+        ])
+        self.assertEqual(before_query_quants, after_query_quants)
+        self.assertEqual(before_query_moves, after_query_moves)
 
     def test_api09_unknown_owner_does_not_return_other_owner_inventory(self):
         other_owner = self.env["res.partner"].create({
@@ -1751,6 +1906,7 @@ class TestGinlongAPI(TransactionCase):
             "name": "Ginlong API09 inventory belonging to another owner",
             "default_code": "GINLONG-API09-OTHER-OWNER",
             "ginlong_owner_code": "OWNER-EXISTS",
+            "ginlong_product_code": "GINLONG-API09-OTHER-OWNER",
             "type": "consu",
         })
         other_owner_product.product_tmpl_id.is_storable = True
@@ -1782,20 +1938,23 @@ class TestGinlongAPI(TransactionCase):
         })
         product_a = self.env["product.product"].create({
             "name": "Ginlong API09 matrix owner A product",
-            "default_code": "P001",
+            "default_code": ginlong_internal_code(self.owner.ginlong_owner_code, "P001"),
             "ginlong_owner_code": self.owner.ginlong_owner_code,
+            "ginlong_product_code": "P001",
             "type": "consu",
         })
         product_b = self.env["product.product"].create({
             "name": "Ginlong API09 matrix owner B product",
-            "default_code": "P001",
+            "default_code": ginlong_internal_code(owner_b.ginlong_owner_code, "P001"),
             "ginlong_owner_code": owner_b.ginlong_owner_code,
+            "ginlong_product_code": "P001",
             "type": "consu",
         })
         product_b_second = self.env["product.product"].create({
             "name": "Ginlong API09 matrix owner B second product",
-            "default_code": "P002",
+            "default_code": ginlong_internal_code(owner_b.ginlong_owner_code, "P002"),
             "ginlong_owner_code": owner_b.ginlong_owner_code,
+            "ginlong_product_code": "P002",
             "type": "consu",
         })
         for product in (product_a, product_b, product_b_second):
@@ -1932,7 +2091,7 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(response_body["owner"], "OWNER-01")
         self.assertEqual(response_body["warehouse"], self.warehouse.code)
         self.assertEqual(response_body["inventoryList"], [
-            {"productCode": self.product.default_code, "quantity": 23.0},
+            {"productCode": self.product.ginlong_product_code, "quantity": 23.0},
         ])
         self.assertEqual(len(log_model.values), 1)
         self.assertEqual(log_model.values[0]["request_path"], "/api/ginlong/TPL_Stock_Query")

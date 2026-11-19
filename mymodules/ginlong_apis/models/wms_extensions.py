@@ -102,13 +102,19 @@ class ProductProduct(models.Model):
     _inherit = 'product.product'
 
     ginlong_owner_code = fields.Char(copy=False, index=True)
+    ginlong_product_code = fields.Char(string="Ginlong Product Code", copy=False, index=True)
+
+
+class ProductTemplate(models.Model):
+    _inherit = 'product.template'
+
     ginlong_specification_model = fields.Char(copy=False)
     ginlong_unit = fields.Char(copy=False)
     ginlong_weight = fields.Float(copy=False)
     ginlong_power = fields.Char(copy=False)
     ginlong_national_standard = fields.Char(copy=False)
     ginlong_certification_model = fields.Char(copy=False)
-    ginlong_product_form = fields.Char(copy=False)
+    ginlong_product_form = fields.Char(copy=False, index=True)
     ginlong_length = fields.Float(copy=False)
     ginlong_width = fields.Float(copy=False)
     ginlong_height = fields.Float(copy=False)
