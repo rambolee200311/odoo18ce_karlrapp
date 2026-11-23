@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "apis": {
+    "API01": {
+      "direction": "inbound",
+      "persistent": true,
+      "key_paths": ["inboundOrderNo"],
+      "action_path": "action",
+      "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "del": "del", "delete": "del"},
+      "default_strategy": "once",
+      "actions": {"add": "once", "edit": "repeatable", "del": "once"},
+      "duplicate_action_errors": {"add": "IDM02"}
+    },
+    "API02": {
+      "direction": "outbound",
+      "persistent": true,
+      "event": "receipt_confirmation",
+      "key_paths": ["source.model", "source.id", "source.business_key"],
+      "action_path": "payload.action",
+      "version_paths": ["source.write_date"],
+      "strategy": "once"
+    },
+    "API03": {
+      "direction": "inbound",
+      "persistent": true,
+      "key_paths": ["outboundOrderNo"],
+      "action_path": "action",
+      "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "del": "del", "delete": "del"},
+      "default_strategy": "once",
+      "actions": {"add": "once", "edit": "repeatable", "del": "once"}
+    },
+    "API04": {
+      "direction": "outbound",
+      "persistent": true,
+      "event": "inbound_completion",
+      "key_paths": ["source.model", "source.id", "source.business_key"],
+      "action_path": "payload.action",
+      "version_paths": ["source.write_date"],
+      "strategy": "once"
+    },
+    "API05": {
+      "direction": "inbound",
+      "persistent": true,
+      "key_paths": ["countOrderNo"],
+      "action_path": "action",
+      "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "del": "del", "delete": "del"},
+      "default_strategy": "once",
+      "actions": {"add": "once", "edit": "repeatable", "del": "once"}
+    },
+    "API06": {
+      "direction": "outbound",
+      "persistent": true,
+      "event": "picking_completed",
+      "key_paths": ["source.model", "source.id", "source.business_key"],
+      "action_path": "payload.action",
+      "version_paths": ["source.write_date"],
+      "strategy": "once"
+    },
+    "API07": {
+      "direction": "inbound",
+      "persistent": true,
+      "key_paths": ["owner", "productCode"],
+      "action_path": "action",
+      "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "upsert": "add"},
+      "default_strategy": "once",
+      "actions": {"add": "once", "edit": "repeatable"}
+    },
+    "API08": {
+      "direction": "outbound",
+      "persistent": true,
+      "event": "shipment_completed",
+      "key_paths": ["source.model", "source.id", "source.business_key"],
+      "action_path": "payload.action",
+      "version_paths": ["source.write_date"],
+      "strategy": "once"
+    },
+    "API09": {
+      "direction": "inbound",
+      "persistent": false,
+      "key_paths": [],
+      "strategy": "repeatable"
+    },
+    "API10": {
+      "direction": "outbound",
+      "persistent": true,
+      "event": "stocktake_completed",
+      "key_paths": ["source.model", "source.id", "source.business_key"],
+      "action_path": "payload.action",
+      "version_paths": ["source.write_date"],
+      "strategy": "once"
+    }
+  }
+}

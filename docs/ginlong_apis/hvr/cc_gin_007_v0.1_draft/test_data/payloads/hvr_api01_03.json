@@ -1,0 +1,102 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR07-20261123-BONDED-MIX-03",
+  "warehouse": "KRWH",
+  "businessType": "保税_海外收货入库",
+  "remark": "CC-GIN-007 HVR-03 三托盘混装",
+  "details": [
+    {
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL",
+      "quantity": 4
+    },
+    {
+      "productCode": "HVR01-20261122-PROD-SEMIFINISHED",
+      "productName": "HVR01 半成品序列号验收产品",
+      "specificationModel": "HVR01-SEMIFINISHED-MODEL",
+      "quantity": 2
+    },
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 12
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR07-B03-FG-001",
+      "quantity": 1,
+      "palletCode": "HVR07-B03-PALLET001",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR07-B03-FG-002",
+      "quantity": 1,
+      "palletCode": "HVR07-B03-PALLET001",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR07-B03-SF-001",
+      "quantity": 1,
+      "palletCode": "HVR07-B03-PALLET001",
+      "productCode": "HVR01-20261122-PROD-SEMIFINISHED",
+      "productName": "HVR01 半成品序列号验收产品",
+      "specificationModel": "HVR01-SEMIFINISHED-MODEL"
+    },
+    {
+      "productSN": "HVR01-20261121-PROD-COMMON",
+      "quantity": 5,
+      "palletCode": "HVR07-B03-PALLET001",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    },
+    {
+      "productSN": "HVR07-B03-FG-003",
+      "quantity": 1,
+      "palletCode": "HVR07-B03-PALLET002",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR01-20261121-PROD-COMMON",
+      "quantity": 4,
+      "palletCode": "HVR07-B03-PALLET002",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    },
+    {
+      "productSN": "HVR07-B03-FG-004",
+      "quantity": 1,
+      "palletCode": "HVR07-B03-PALLET003",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR07-B03-SF-002",
+      "quantity": 1,
+      "palletCode": "HVR07-B03-PALLET003",
+      "productCode": "HVR01-20261122-PROD-SEMIFINISHED",
+      "productName": "HVR01 半成品序列号验收产品",
+      "specificationModel": "HVR01-SEMIFINISHED-MODEL"
+    },
+    {
+      "productSN": "HVR01-20261121-PROD-COMMON",
+      "quantity": 3,
+      "palletCode": "HVR07-B03-PALLET003",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    }
+  ]
+}

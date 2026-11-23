@@ -1,6 +1,11 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_ginlong_api_idempotency_deny,ginlong.api.idempotency private,model_ginlong_api_idempotency,base.group_user,0,0,0,0
+access_ginlong_api_idempotency_stock_manager_read,ginlong.api.idempotency stock manager read,model_ginlong_api_idempotency,stock.group_stock_manager,1,0,0,0
 access_ginlong_api_rate_counter_deny,ginlong.api.rate.counter private,model_ginlong_api_rate_counter,base.group_user,0,0,0,0
 access_ginlong_inbound_receipt_detail_stock_user,ginlong.inbound.receipt.detail stock user,model_ginlong_inbound_receipt_detail,stock.group_stock_user,1,1,1,1
 access_ginlong_outbound_shipment_detail_stock_user,ginlong.outbound.shipment.detail stock user,model_ginlong_outbound_shipment_detail,stock.group_stock_user,1,1,1,1
 access_world_depot_api_log_ginlong_stock_manager,world.depot.api.log Ginlong read only,worlddepot.model_world_depot_api_log,stock.group_stock_manager,1,0,0,0
+access_ginlong_api_idempotency_administrator,ginlong.api.idempotency administrator,model_ginlong_api_idempotency,base.group_system,1,1,1,1
+access_ginlong_api_rate_counter_administrator,ginlong.api.rate.counter administrator,model_ginlong_api_rate_counter,base.group_system,1,1,1,1
+access_ginlong_inbound_receipt_detail_administrator,ginlong.inbound.receipt.detail administrator,model_ginlong_inbound_receipt_detail,base.group_system,1,1,1,1
+access_ginlong_outbound_shipment_detail_administrator,ginlong.outbound.shipment.detail administrator,model_ginlong_outbound_shipment_detail,base.group_system,1,1,1,1

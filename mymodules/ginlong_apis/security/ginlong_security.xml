@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- 共享日志模型以 API objectid 标记后，仅允许 Administrator 读取 Ginlong API01–10 记录。 -->
+    <record id="rule_ginlong_api_log_admin_only" model="ir.rule">
+        <field name="name">Ginlong Administrator: Ginlong API01-10 logs only</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_api_log"/>
+        <field name="domain_force">[('ginlong_api_code', 'in', ['API01', 'API02', 'API03', 'API04', 'API05', 'API06', 'API07', 'API08', 'API09', 'API10'])]</field>
+        <field name="groups" eval="[(4, ref('stock.group_stock_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- 幂等模型也通过 Record Rule 和 ACL 双重限制，API 服务使用 sudo 正常维护状态。 -->
+    <record id="rule_ginlong_idempotency_admin_only" model="ir.rule">
+        <field name="name">Ginlong Administrator: API01-10 idempotency only</field>
+        <field name="model_id" ref="model_ginlong_api_idempotency"/>
+        <field name="domain_force">[('api_code', 'in', ['API01', 'API02', 'API03', 'API04', 'API05', 'API06', 'API07', 'API08', 'API09', 'API10'])]</field>
+        <field name="groups" eval="[(4, ref('stock.group_stock_manager'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+</odoo>

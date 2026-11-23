@@ -49,6 +49,30 @@ def _response_data_for_log(request_path, response):
     return payload
 
 
+def _is_ginlong_api_path(request_path):
+    """识别需要采用 Ginlong 三字段错误契约的入站路由。"""
+    return request_path.startswith(('/api/ginlong/', '/ginlong/sim/'))
+
+
+def _ginlong_system_error_values(error):
+    """用 Ginlong 通用 Error 配置生成安全兜底错误，失败时使用固定安全响应。"""
+    details = "%s: %s" % (type(error).__name__, error)
+    try:
+        # 延迟导入避免 WorldDepot 在加载时依赖 Ginlong 模块。
+        from odoo.addons.ginlong_apis.errors import make_error
+
+        configured_error = make_error("SYS01", details=details)
+        return configured_error.to_log_values()
+    except Exception:
+        # Error 配置本身不可用时，仍禁止把原始异常内容透传给外部调用方。
+        return {
+            "code": "SYS01",
+            "message": "系统处理失败",
+            "details": details,
+            "exception_info": "SYS01: 系统处理失败",
+        }
+
+
 class APILog(models.Model):
     _name = 'world.depot.api.log'
     _description = 'API Log'
@@ -192,6 +216,15 @@ def api_logger(func):
                 if "data" in response_for_log:
                     log_data = json.dumps(response_for_log.get("data"), ensure_ascii=False)
 
+            # 集成控制器可附加内部错误元数据；日志记录完整诊断，但不改写已生成的对外响应。
+            internal_error = getattr(request, "ginlong_api_error_log", None)
+            if isinstance(internal_error, dict) and internal_error.get("code"):
+                log_success = False
+                status = "error"
+                log_code = internal_error["code"]
+                log_msg = internal_error.get("message") or ""
+                exception_details = internal_error.get("details") or log_msg
+
         except Exception as e:
             if isinstance(e, PG_CONCURRENCY_EXCEPTIONS_TO_RETRY):
                 # Preserve Odoo's built-in HTTP transaction retry. Rolling back
@@ -203,17 +236,33 @@ def api_logger(func):
             status = 'error'
             response_str = ''
             exception_details = str(e)
-            response = {
-                'success': False,
-                'error': 'An unexpected error occurred. Please contact support.',
-                'details': exception_details,
-                "code": "SERVER_ERROR",
-            }
-            response_str = json.dumps(response, ensure_ascii=False)
             log_success = False
-            log_code = "SERVER_ERROR"
-            log_msg = exception_details
             log_data = ""
+            if _is_ginlong_api_path(request_path):
+                error_values = _ginlong_system_error_values(e)
+                exception_details = error_values.get("details") or str(e)
+                log_code = error_values["code"]
+                log_msg = error_values["message"]
+                response = http.Response(
+                    json.dumps({
+                        "returnStatus": "N",
+                        "exceptionInfo": error_values["exception_info"],
+                        "operationTime": fields.Datetime.to_string(fields.Datetime.now()),
+                    }, ensure_ascii=False),
+                    status=500,
+                    mimetype="application/json",
+                )
+                response_str = response.get_data(as_text=True)
+            else:
+                response = {
+                    'success': False,
+                    'error': 'An unexpected error occurred. Please contact support.',
+                    'details': exception_details,
+                    "code": "SERVER_ERROR",
+                }
+                response_str = json.dumps(response, ensure_ascii=False)
+                log_code = "SERVER_ERROR"
+                log_msg = exception_details
         # Always log using a separate transaction
         try:
             # Create a new database connection and environment for logging

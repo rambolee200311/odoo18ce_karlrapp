@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- owner code 保存 Ginlong 传输编码，独立于联系人显示名称。 -->
     <record id="view_partner_form_ginlong_owner_code" model="ir.ui.view">
         <field name="name">res.partner.form.ginlong.owner.code</field>
         <field name="model">res.partner</field>

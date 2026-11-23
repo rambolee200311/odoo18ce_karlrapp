@@ -1,0 +1,2178 @@
+{
+  "source": {
+    "workbook": "海外WMS与第三方系统集成V3.2.xlsx",
+    "worksheet": "海外WMS与第三方系统的接口与处理逻辑",
+    "request_mandatory_column": "O",
+    "response_mandatory_column": "V",
+    "action_rules": "API01/03/05/07 使用当前已提供的 Action 矩阵；明细 Delete 不要求携带。",
+    "type_column": "Q",
+    "length_column": "R",
+    "date_format": "yyyy-MM-dd HH:mm:ss（按 V3.2 示例及 Odoo DateTime 字符串）"
+  },
+  "apis": {
+    "API01": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 5,
+              "field_code": "0101"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 6,
+              "field_code": "0102"
+            },
+            "description": "创建/删除",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "inboundOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 7,
+              "field_code": "0103"
+            },
+            "description": "入库单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "warehouse",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 8,
+              "field_code": "0104"
+            },
+            "description": "仓库",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "businessType",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 9,
+              "field_code": "0105"
+            },
+            "description": "业务类型",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "remark",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 10,
+              "field_code": "0106"
+            },
+            "description": "备注",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": [
+          {
+            "name": "details",
+            "items": {
+              "fields": [
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 11,
+                    "field_code": "0107"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productName",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 12,
+                    "field_code": "0108"
+                  },
+                  "description": "产品名称",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "specificationModel",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 13,
+                    "field_code": "0109"
+                  },
+                  "description": "规格型号",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 14,
+                    "field_code": "0110"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                }
+              ]
+            },
+            "required_on": [
+              "add"
+            ],
+            "validate_on": [
+              "add",
+              "edit"
+            ],
+            "min_items_on": [
+              "add",
+              "edit"
+            ]
+          },
+          {
+            "name": "snList",
+            "items": {
+              "fields": [
+                {
+                  "name": "productSN",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 15,
+                    "field_code": "0111"
+                  },
+                  "description": "产品 SN",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "quantity",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 16,
+                    "field_code": "0112"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "palletCode",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 17,
+                    "field_code": "0113"
+                  },
+                  "description": "托盘码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productCode",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 18,
+                    "field_code": "0114"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productName",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 19,
+                    "field_code": "0115"
+                  },
+                  "description": "产品名称",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "specificationModel",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 20,
+                    "field_code": "0116"
+                  },
+                  "description": "规格型号",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                }
+              ]
+            },
+            "required_on": [],
+            "validate_on": [
+              "add",
+              "edit"
+            ],
+            "min_items_on": []
+          }
+        ],
+        "action_aliases": {
+          "add": "add",
+          "create": "add",
+          "del": "del",
+          "delete": "del",
+          "edit": "edit",
+          "update": "edit"
+        }
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 5,
+              "field_code": "0101"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 6,
+              "field_code": "0102"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 7,
+              "field_code": "0103"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "add": "add",
+        "create": "add",
+        "del": "del",
+        "delete": "del",
+        "edit": "edit",
+        "update": "edit"
+      }
+    },
+    "API02": {
+      "request": {
+        "fields": [
+          {
+            "name": "inboundOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 21,
+              "field_code": "0201"
+            },
+            "description": "入库单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 22,
+              "field_code": "0202"
+            },
+            "description": "确认/取消",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "receiptConfirmed",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 23,
+              "field_code": "0203"
+            },
+            "description": "是否收货",
+            "q_type": "VARCHAR",
+            "length": 10
+          }
+        ],
+        "collections": []
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 21,
+              "field_code": "0201"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 22,
+              "field_code": "0202"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 23,
+              "field_code": "0203"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "update": "update"
+      }
+    },
+    "API03": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 33,
+              "field_code": "0301"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 34,
+              "field_code": "0302"
+            },
+            "description": "创建/删除",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "outboundOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 35,
+              "field_code": "0303"
+            },
+            "description": "出库单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "warehouse",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 36,
+              "field_code": "0304"
+            },
+            "description": "仓库",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "businessType",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 37,
+              "field_code": "0305"
+            },
+            "description": "业务类型",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "remark",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 38,
+              "field_code": "0306"
+            },
+            "description": "备注",
+            "q_type": "VARCHAR",
+            "length": 100
+          },
+          {
+            "name": "customer",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 39,
+              "field_code": "0307"
+            },
+            "description": "客户名称",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "address",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 40,
+              "field_code": "0308"
+            },
+            "description": "送货地址",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "consignee",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 41,
+              "field_code": "0309"
+            },
+            "description": "收货人",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "contact",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 42,
+              "field_code": "0310"
+            },
+            "description": "联系电话",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "contactEmail",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 43,
+              "field_code": "0311"
+            },
+            "description": "联系人邮箱",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "shippingMethod",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 44,
+              "field_code": "0312"
+            },
+            "description": "发运方式",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": [
+          {
+            "name": "details",
+            "items": {
+              "fields": [
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 45,
+                    "field_code": "0313"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productName",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 46,
+                    "field_code": "0314"
+                  },
+                  "description": "产品名称",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "specificationModel",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 47,
+                    "field_code": "0315"
+                  },
+                  "description": "规格型号",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 48,
+                    "field_code": "0316"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "order_no",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 49,
+                    "field_code": "0317"
+                  },
+                  "description": "销售订单号",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "unit",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 50,
+                    "field_code": "0318"
+                  },
+                  "description": "单位",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "net_wt_machine",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 51,
+                    "field_code": "0319"
+                  },
+                  "description": "机器净重（kg）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "net_wt_total",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 52,
+                    "field_code": "0320"
+                  },
+                  "description": "总净重（kg）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pack_qty",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 53,
+                    "field_code": "0321"
+                  },
+                  "description": "包装台数",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pallet_qty",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 54,
+                    "field_code": "0322"
+                  },
+                  "description": "出货箱数（托盘数）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pallet_len",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 55,
+                    "field_code": "0323"
+                  },
+                  "description": "托盘长（mm）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pallet_wid",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 56,
+                    "field_code": "0324"
+                  },
+                  "description": "托盘宽（mm）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pallet_hgt",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 57,
+                    "field_code": "0325"
+                  },
+                  "description": "推盘高（mm）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "unit_vol",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 58,
+                    "field_code": "0326"
+                  },
+                  "description": "单位体积（m^3）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pack_unit",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 59,
+                    "field_code": "0327"
+                  },
+                  "description": "包装单位",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "pack_wt",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 60,
+                    "field_code": "0328"
+                  },
+                  "description": "包材重量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "pallet_total_wt",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 61,
+                    "field_code": "0329"
+                  },
+                  "description": "顶板+托盘重量（kg）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "total_vol",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 62,
+                    "field_code": "0330"
+                  },
+                  "description": "总体积（m^3）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "carton_wt_total",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 63,
+                    "field_code": "0331"
+                  },
+                  "description": "总箱重（kg）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "gross_wt_total",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 64,
+                    "field_code": "0332"
+                  },
+                  "description": "总毛重（kg）",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "standard",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 65,
+                    "field_code": "0333"
+                  },
+                  "description": "国家标准",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "pack_mode",
+                  "required": false,
+                  "source": {
+                    "column": "O",
+                    "row": 66,
+                    "field_code": "0334"
+                  },
+                  "description": "装箱方式",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                }
+              ]
+            },
+            "required_on": [],
+            "validate_on": [
+              "add",
+              "edit"
+            ],
+            "min_items_on": [
+              "add",
+              "edit"
+            ]
+          }
+        ],
+        "action_aliases": {
+          "add": "add",
+          "create": "add",
+          "del": "del",
+          "delete": "del",
+          "edit": "edit",
+          "update": "edit"
+        }
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 33,
+              "field_code": "0301"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 34,
+              "field_code": "0302"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 35,
+              "field_code": "0303"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "add": "add",
+        "create": "add",
+        "del": "del",
+        "delete": "del",
+        "edit": "edit",
+        "update": "edit"
+      }
+    },
+    "API04": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 24,
+              "field_code": "0401"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 25,
+              "field_code": "0402"
+            },
+            "description": "创建/删除",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "inboundOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 26,
+              "field_code": "0403"
+            },
+            "description": "入库单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": [
+          {
+            "name": "snList",
+            "items": {
+              "fields": [
+                {
+                  "name": "productSN",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 27,
+                    "field_code": "0404"
+                  },
+                  "description": "产品 SN",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 28,
+                    "field_code": "0405"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "palletCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 29,
+                    "field_code": "0406"
+                  },
+                  "description": "托盘码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 30,
+                    "field_code": "0407"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "operator",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 31,
+                    "field_code": "0408"
+                  },
+                  "description": "操作人员",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "operationTime",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 32,
+                    "field_code": "0409"
+                  },
+                  "description": "操作时间",
+                  "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+                  "format": "%Y-%m-%d %H:%M:%S"
+                }
+              ]
+            },
+            "required_on": [
+              "*"
+            ],
+            "validate_on": [
+              "*"
+            ],
+            "min_items_on": [
+              "*"
+            ]
+          }
+        ]
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 24,
+              "field_code": "0401"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 25,
+              "field_code": "0402"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 26,
+              "field_code": "0403"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "create": "create"
+      }
+    },
+    "API05": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 81,
+              "field_code": "0501"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 82,
+              "field_code": "0502"
+            },
+            "description": "创建/删除",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "countOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 83,
+              "field_code": "0503"
+            },
+            "description": "盘点单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "warehouse",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 84,
+              "field_code": "0504"
+            },
+            "description": "仓库",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "remark",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 85,
+              "field_code": "0505"
+            },
+            "description": "备注",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": [
+          {
+            "name": "details",
+            "items": {
+              "fields": [
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 86,
+                    "field_code": "0506"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productName",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 87,
+                    "field_code": "0507"
+                  },
+                  "description": "产品名称",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "specificationModel",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 88,
+                    "field_code": "0508"
+                  },
+                  "description": "规格型号",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 89,
+                    "field_code": "0509"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                }
+              ]
+            },
+            "required_on": [
+              "add"
+            ],
+            "validate_on": [
+              "add",
+              "edit"
+            ],
+            "min_items_on": [
+              "add",
+              "edit"
+            ]
+          },
+          {
+            "name": "snList",
+            "items": {
+              "fields": [
+                {
+                  "name": "productSN",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 90,
+                    "field_code": "0510"
+                  },
+                  "description": "产品 SN",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 91,
+                    "field_code": "0511"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "palletCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 92,
+                    "field_code": "0512"
+                  },
+                  "description": "托盘码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 93,
+                    "field_code": "0513"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productName",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 94,
+                    "field_code": "0514"
+                  },
+                  "description": "产品名称",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "specificationModel",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 95,
+                    "field_code": "0515"
+                  },
+                  "description": "规格型号",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                }
+              ]
+            },
+            "required_on": [],
+            "validate_on": [
+              "add",
+              "edit"
+            ],
+            "min_items_on": []
+          }
+        ],
+        "action_aliases": {
+          "add": "add",
+          "create": "add",
+          "del": "del",
+          "delete": "del",
+          "edit": "edit",
+          "update": "edit"
+        }
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 81,
+              "field_code": "0501"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 82,
+              "field_code": "0502"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 83,
+              "field_code": "0503"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "add": "add",
+        "create": "add",
+        "del": "del",
+        "delete": "del",
+        "edit": "edit",
+        "update": "edit"
+      }
+    },
+    "API06": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 67,
+              "field_code": "0601"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 68,
+              "field_code": "0602"
+            },
+            "description": "创建/删除",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "outboundOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 69,
+              "field_code": "0603"
+            },
+            "description": "出库单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "palletQty",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 70,
+              "field_code": "0604"
+            },
+            "description": "托盘数",
+            "precision": 18,
+            "scale": 6,
+            "q_type": "DECIMAL",
+            "serialization": "项目负责人确认按 JSON string 发送。"
+          },
+          {
+            "name": "totalWeight",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 71,
+              "field_code": "0605"
+            },
+            "description": "总重量",
+            "precision": 18,
+            "scale": 6,
+            "q_type": "DECIMAL",
+            "serialization": "项目负责人确认按 JSON string 发送。"
+          }
+        ],
+        "collections": [
+          {
+            "name": "snList",
+            "items": {
+              "fields": [
+                {
+                  "name": "productSN",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 72,
+                    "field_code": "0606"
+                  },
+                  "description": "产品 SN",
+                  "q_type": "VARCHAR",
+                  "length": 100
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 73,
+                    "field_code": "0607"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "palletCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 74,
+                    "field_code": "0608"
+                  },
+                  "description": "托盘码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 75,
+                    "field_code": "0609"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "operator",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 76,
+                    "field_code": "0610"
+                  },
+                  "description": "操作人员",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "operationTime",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 77,
+                    "field_code": "0611"
+                  },
+                  "description": "操作时间",
+                  "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+                  "format": "%Y-%m-%d %H:%M:%S"
+                }
+              ]
+            },
+            "required_on": [
+              "*"
+            ],
+            "validate_on": [
+              "*"
+            ],
+            "min_items_on": [
+              "*"
+            ]
+          }
+        ]
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 67,
+              "field_code": "0601"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 68,
+              "field_code": "0602"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 69,
+              "field_code": "0603"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "create": "create"
+      }
+    },
+    "API07": {
+      "request": {
+        "fields": [
+          {
+            "name": "action",
+            "required": true,
+            "type": "string",
+            "contract_source": "已提供的 Ginlong 接口矩阵及现有 API07 Add/Edit 动作映射；V3.2 字段表未列出。",
+            "q_type": null
+          },
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 105,
+              "field_code": "0701"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "productCode",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 106,
+              "field_code": "0702"
+            },
+            "description": "产品编码",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "productName",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 107,
+              "field_code": "0703"
+            },
+            "description": "产品名称",
+            "q_type": "VARCHAR",
+            "length": 100
+          },
+          {
+            "name": "specificationModel",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 108,
+              "field_code": "0704"
+            },
+            "description": "规格型号",
+            "q_type": "VARCHAR",
+            "length": 100
+          },
+          {
+            "name": "unit",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 109,
+              "field_code": "0705"
+            },
+            "description": "单位",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "power",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 110,
+              "field_code": "0706"
+            },
+            "description": "功率",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "nationalStandard",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 111,
+              "field_code": "0707"
+            },
+            "description": "国家标准",
+            "q_type": "VARCHAR",
+            "length": 100
+          },
+          {
+            "name": "certificationModel",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 112,
+              "field_code": "0708"
+            },
+            "description": "认证型号",
+            "q_type": "VARCHAR",
+            "length": 100
+          },
+          {
+            "name": "productForm",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 113,
+              "field_code": "0709"
+            },
+            "description": "产品形态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "weight",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 114,
+              "field_code": "0710"
+            },
+            "description": "重量",
+            "precision": 18,
+            "scale": 6,
+            "q_type": "DECIMAL"
+          },
+          {
+            "name": "length",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 115,
+              "field_code": "0711"
+            },
+            "description": "长",
+            "precision": 18,
+            "scale": 6,
+            "q_type": "DECIMAL"
+          },
+          {
+            "name": "width",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 116,
+              "field_code": "0712"
+            },
+            "description": "宽",
+            "precision": 18,
+            "scale": 6,
+            "q_type": "DECIMAL"
+          },
+          {
+            "name": "height",
+            "required": false,
+            "source": {
+              "column": "O",
+              "row": 117,
+              "field_code": "0713"
+            },
+            "description": "高",
+            "precision": 18,
+            "scale": 6,
+            "q_type": "DECIMAL"
+          }
+        ],
+        "collections": [],
+        "action_aliases": {
+          "add": "add",
+          "edit": "edit",
+          "update": "edit"
+        }
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 105,
+              "field_code": "0701"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 106,
+              "field_code": "0702"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 107,
+              "field_code": "0703"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "add": "add",
+        "edit": "edit"
+      }
+    },
+    "API08": {
+      "request": {
+        "fields": [
+          {
+            "name": "outboundOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 78,
+              "field_code": "0801"
+            },
+            "description": "出库单号",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 79,
+              "field_code": "0802"
+            },
+            "description": "确认/取消",
+            "q_type": "VARCHAR",
+            "length": 10
+          },
+          {
+            "name": "shipmentConfirmed",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 80,
+              "field_code": "0803"
+            },
+            "description": "是否发货确认",
+            "q_type": "VARCHAR",
+            "length": 10
+          }
+        ],
+        "collections": []
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 78,
+              "field_code": "0801"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 79,
+              "field_code": "0802"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 80,
+              "field_code": "0803"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "create": "create"
+      }
+    },
+    "API09": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 118,
+              "field_code": "0901"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "warehouse",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 119,
+              "field_code": "0902"
+            },
+            "description": "仓库",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": []
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 118,
+              "field_code": "0901"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 119,
+              "field_code": "0902"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 120,
+              "field_code": "0903"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          },
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 121,
+              "field_code": "0904"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "warehouse",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 122,
+              "field_code": "0905"
+            },
+            "description": "仓库",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": [
+          {
+            "name": "inventoryList",
+            "required": true,
+            "validate_on": [
+              "*"
+            ],
+            "min_items": 0,
+            "source": "V3.2 响应 JSON 示例中的数组容器；数组项字段来自 V 列第 123–124 行。",
+            "items": {
+              "fields": [
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "V",
+                    "row": 123,
+                    "field_code": "0906"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "V",
+                    "row": 124,
+                    "field_code": "0907"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "API10": {
+      "request": {
+        "fields": [
+          {
+            "name": "owner",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 96,
+              "field_code": "1001"
+            },
+            "description": "货主",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "action",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 97,
+              "field_code": "1002"
+            },
+            "description": "创建/删除",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "countOrderNo",
+            "required": true,
+            "source": {
+              "column": "O",
+              "row": 98,
+              "field_code": "1003"
+            },
+            "description": "盘点单",
+            "q_type": "VARCHAR",
+            "length": 40
+          }
+        ],
+        "collections": [
+          {
+            "name": "snList",
+            "items": {
+              "fields": [
+                {
+                  "name": "productSN",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 99,
+                    "field_code": "1004"
+                  },
+                  "description": "产品 SN",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "quantity",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 100,
+                    "field_code": "1005"
+                  },
+                  "description": "数量",
+                  "precision": 18,
+                  "scale": 6,
+                  "q_type": "DECIMAL"
+                },
+                {
+                  "name": "palletCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 101,
+                    "field_code": "1006"
+                  },
+                  "description": "托盘码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "productCode",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 102,
+                    "field_code": "1007"
+                  },
+                  "description": "产品编码",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "operator",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 103,
+                    "field_code": "1008"
+                  },
+                  "description": "操作人员",
+                  "q_type": "VARCHAR",
+                  "length": 40
+                },
+                {
+                  "name": "operationTime",
+                  "required": true,
+                  "source": {
+                    "column": "O",
+                    "row": 104,
+                    "field_code": "1009"
+                  },
+                  "description": "操作时间",
+                  "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+                  "format": "%Y-%m-%d %H:%M:%S"
+                }
+              ]
+            },
+            "required_on": [
+              "*"
+            ],
+            "validate_on": [
+              "*"
+            ],
+            "min_items_on": [
+              "*"
+            ]
+          }
+        ]
+      },
+      "response": {
+        "fields": [
+          {
+            "name": "returnStatus",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 96,
+              "field_code": "1001"
+            },
+            "description": "返回状态",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "exceptionInfo",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 97,
+              "field_code": "1002"
+            },
+            "description": "异常信息",
+            "q_type": "VARCHAR",
+            "length": 40
+          },
+          {
+            "name": "operationTime",
+            "required": true,
+            "source": {
+              "column": "V",
+              "row": 98,
+              "field_code": "1003"
+            },
+            "description": "操作时间",
+            "q_type": "DateTime(yyyy-MM-dd 00:00:00)",
+            "format": "%Y-%m-%d %H:%M:%S"
+          }
+        ],
+        "collections": []
+      },
+      "action_aliases": {
+        "add": "add",
+        "del": "del"
+      }
+    }
+  }
+}

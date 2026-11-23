@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- 同一原始 productCode 的共享属性放在模板；货主与原始编码作为变体身份展示。 -->
     <record id="view_product_template_form_ginlong" model="ir.ui.view">
         <field name="name">product.template.form.ginlong</field>
         <field name="model">product.template</field>

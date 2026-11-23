@@ -1,0 +1,51 @@
+{
+  "package_version": "CC-GIN-007-HVR-v0.1-Draft",
+  "status": "DRAFT_NOT_APPROVED",
+  "cases": [
+    {
+      "id": "HVR-API01-01",
+      "payload": "test_data/payloads/hvr_api01_01.json",
+      "curl": "test_data/curl/hvr_api01_01.sh",
+      "expected": "STANDARD，无 snList，接受；无预报 SN 行"
+    },
+    {
+      "id": "HVR-API01-02",
+      "payload": "test_data/payloads/hvr_api01_02.json",
+      "curl": "test_data/curl/hvr_api01_02.sh",
+      "expected": "STANDARD 畸形 snList 被业务忽略，日志保留原始请求"
+    },
+    {
+      "id": "HVR-API01-03",
+      "payload": "test_data/payloads/hvr_api01_03.json",
+      "curl": "test_data/curl/hvr_api01_03.sh",
+      "expected": "保税业务：3 产品、3 混托盘，产品数量 4/2/12"
+    },
+    {
+      "id": "HVR-API01-04",
+      "payload": "test_data/payloads/hvr_api01_04.json",
+      "curl": "test_data/curl/hvr_api01_04.sh",
+      "expected": "保税原材料省略 snList，数量 12"
+    },
+    {
+      "id": "HVR-API01-05",
+      "payload": "test_data/payloads/hvr_api01_05.json",
+      "curl": "test_data/curl/hvr_api01_05.sh",
+      "expected": "原材料 5/7 分托；与一件 SN 产品共托"
+    },
+    {
+      "id": "HVR-API01-06",
+      "payload": "test_data/payloads/hvr_api01_06.json",
+      "curl": "test_data/curl/hvr_api01_06.sh",
+      "expected": "SN 管理行 quantity=3 拒绝，不写入订单"
+    },
+    {
+      "id": "HVR-API01-07",
+      "direction": "outbound",
+      "payload": null,
+      "curl": null,
+      "expected_outbound_payload": "test_data/expected/hvr_api01_07_api04_body.json",
+      "trigger": "在 Odoo 入库 Order Form 点击 API04 回传按钮；系统从已保存的实际 Picking/Move Line 生成 JSON",
+      "expected": "条件式 UI/API04 核查：使用现存已完成 Picking 和本机 Mock"
+    }
+  ]
+}

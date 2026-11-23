@@ -1,4 +1,4 @@
-"""Move Ginlong product identity/properties into native template variants."""
+"""将已有 Ginlong 产品身份和共享属性迁移到 Odoo 原生模板/变体结构。"""
 
 from odoo import SUPERUSER_ID, Command, api
 from odoo.exceptions import UserError
@@ -26,6 +26,15 @@ TRACKING_BY_FORM = {
 
 
 def migrate(cr, version):
+    """迁移既有产品并保留其记录身份及库存引用。
+
+    参数：
+        cr: Odoo 提供的当前数据库事务游标。
+        version: 模块升级前的版本号。
+
+    返回：
+        无。发现无法安全推断或存在冲突的数据时抛出 UserError，令升级失败。
+    """
     env = api.Environment(cr, SUPERUSER_ID, {})
     products = env["product.product"].sudo().with_context(active_test=False).search([
         ("ginlong_owner_code", "!=", False),
@@ -33,6 +42,7 @@ def migrate(cr, version):
     if not products:
         return
 
+    # 先整体检查产品编码和 owner 组合，避免迁移过程中静默合并模板或变体。
     templates_by_code = {}
     pair_counts = {}
     for product in products:
@@ -87,6 +97,7 @@ def migrate(cr, version):
                 "the migration stopped to avoid changing its variant combinations." % template.id
             )
 
+        # 共享属性只保留在模板；变体仅增加货主维度和内部编码。
         template_values = {name: product[name] or False for name in SHARED_FIELDS}
         template_values["tracking"] = tracking
         template_values["is_storable"] = True

@@ -1,0 +1,48 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR07-20261123-BONDED-RAW-SPLIT-05",
+  "warehouse": "KRWH",
+  "businessType": "保税_海外收货入库",
+  "remark": "CC-GIN-007 HVR-05 原材料分托并与 SN 产品共托",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 12
+    },
+    {
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL",
+      "quantity": 1
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR01-20261121-PROD-COMMON",
+      "quantity": 5,
+      "palletCode": "HVR07-B05-PALLET001",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    },
+    {
+      "productSN": "HVR07-B05-FG-001",
+      "quantity": 1,
+      "palletCode": "HVR07-B05-PALLET001",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR01-20261121-PROD-COMMON",
+      "quantity": 7,
+      "palletCode": "HVR07-B05-PALLET002",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    }
+  ]
+}

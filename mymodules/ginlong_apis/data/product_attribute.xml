@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo noupdate="1">
+    <!-- 货主作为原生产品属性生成变体，使同一 productCode 可按 owner 隔离库存。 -->
     <record id="product_attribute_ginlong_owner" model="product.attribute">
         <field name="name">Ginlong Owner</field>
         <field name="create_variant">always</field>

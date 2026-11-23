@@ -1,0 +1,26 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR07-20261123-BONDED-INVALID-SN-QTY-06",
+  "warehouse": "KRWH",
+  "businessType": "保税_海外收货入库",
+  "remark": "CC-GIN-007 HVR-06 SN 单条数量错误",
+  "details": [
+    {
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL",
+      "quantity": 3
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR07-B06-FG-INVALID-001",
+      "quantity": 3,
+      "palletCode": "HVR07-B06-PALLET001",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- 入库 Order 上分别提供收货确认和入库实绩回传，二者来源保持独立。 -->
     <record id="view_inbound_order_form_ginlong_callbacks" model="ir.ui.view">
         <field name="name">inbound.order.form.ginlong.callbacks</field>
         <field name="model">world.depot.inbound.order</field>
@@ -47,6 +48,7 @@
         </field>
     </record>
 
+    <!-- 出库 Order 上分别展示备货与发货业务数据，并从保存后的 ORM 记录生成回传。 -->
     <record id="view_outbound_order_form_ginlong_callbacks" model="ir.ui.view">
         <field name="name">outbound.order.form.ginlong.callbacks</field>
         <field name="model">world.depot.outbound.order</field>
@@ -106,6 +108,7 @@
         </field>
     </record>
 
+    <!-- 操作人员和时间只在实际 Picking 的 Ginlong Notebook 补充，产品/SN/数量/托盘仍取 move line。 -->
     <record id="view_stock_picking_form_ginlong_callbacks" model="ir.ui.view">
         <field name="name">stock.picking.form.ginlong.callbacks</field>
         <field name="model">stock.picking</field>
@@ -135,6 +138,7 @@
         </field>
     </record>
 
+    <!-- API10 使用 WorldDepot 仓库实盘结果，不从 stock.quant 推算盘点结果。 -->
     <record id="view_world_depot_stocktake_order_form_ginlong_callback" model="ir.ui.view">
         <field name="name">world.depot.stocktake.order.form.ginlong.callback</field>
         <field name="model">world.depot.stocktake.order</field>

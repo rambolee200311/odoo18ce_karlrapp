@@ -1,0 +1,69 @@
+{
+  "version": 2,
+  "exception_info_max_length": 40,
+  "errors": {
+    "REQ01": {
+      "message": "{summary}",
+      "fallback_message": "必填字段校验失败",
+      "diagnostic": "Required fields: {details}{related_type_details}"
+    },
+    "TYP01": {
+      "message": "{summary}",
+      "fallback_message": "字段类型校验失败",
+      "diagnostic": "Invalid field types: {details}"
+    },
+    "IDM07": {
+      "message": "重复新增，冲突键(owner, productCode)",
+      "diagnostic": "API07 Add rejected: owner={owner}, productCode={productCode} already exists"
+    },
+    "IDM02": {
+      "message": "重复新增，冲突键: {key}",
+      "diagnostic": "Ginlong {api_code} {action} rejected because a successful add already exists: {key}={business_key}"
+    },
+    "IDM01": {
+      "message": "幂等事件正在处理中",
+      "diagnostic": "Ginlong idempotency conflict: {details}"
+    },
+    "AUTH01": {
+      "message": "API认证失败",
+      "diagnostic": "Authentication rejected: {details}"
+    },
+    "RATE01": {
+      "message": "API请求频率超限",
+      "diagnostic": "Rate limit rejected: {details}"
+    },
+    "RATE02": {
+      "message": "限流服务暂不可用",
+      "diagnostic": "Rate limit storage failure: {details}"
+    },
+    "REQ02": {
+      "message": "请求格式无效",
+      "diagnostic": "Invalid request: {details}"
+    },
+    "BUS01": {
+      "message": "{message}",
+      "fallback_message": "业务处理失败",
+      "diagnostic": "Business processing rejected: {details}"
+    },
+    "BUS02": {
+      "message": "同productCode的productForm必须一致",
+      "diagnostic": "API07 productCode {productCode} has shared-field conflict for owner={owner}: {fields}"
+    },
+    "BUS03": {
+      "message": "API07 Edit目标产品不存在",
+      "diagnostic": "API07 Edit target not found: owner={owner}, productCode={productCode}"
+    },
+    "BUS05": {
+      "message": "Odoo计量单位名称不唯一: {unit}",
+      "diagnostic": "API07 unit {unit} matched multiple existing Odoo uom.uom records"
+    },
+    "BUS06": {
+      "message": "productForm仅支持原材料/半成品/成品",
+      "diagnostic": "API07 productForm {productForm} is unsupported; allowed values: 原材料, 半成品, 成品"
+    },
+    "SYS01": {
+      "message": "系统处理失败",
+      "diagnostic": "Internal processing error: {details}"
+    }
+  }
+}

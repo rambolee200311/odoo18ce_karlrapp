@@ -1,3 +1,5 @@
+"""定义幂等、限流记录及 Ginlong 管理设置。"""
+
 import logging
 
 from odoo import api, fields, models
@@ -8,14 +10,29 @@ _logger = logging.getLogger(__name__)
 
 
 class GinlongAPIIdempotency(models.Model):
+    """保存 Ginlong 请求及回传事件的幂等状态和可复用结果。"""
+
     _name = "ginlong.api.idempotency"
     _description = "Ginlong API Idempotency Result"
     _order = "id desc"
 
     api_code = fields.Char(required=True, index=True)
+    direction = fields.Selection(
+        [("inbound", "Inbound"), ("outbound", "Outbound")],
+        required=True, default="inbound", index=True,
+    )
+    action = fields.Char(index=True)
     business_key = fields.Char(required=True, index=True, size=512)
+    event_key = fields.Char(index=True, size=512)
     request_fingerprint = fields.Char(required=True, size=64, index=True)
-    response_json = fields.Text(required=True)
+    state = fields.Selection(
+        [("processing", "Processing"), ("succeeded", "Succeeded"),
+         ("failed", "Failed"), ("unknown", "Unknown")],
+        required=True, default="succeeded", index=True,
+    )
+    attempt_count = fields.Integer(required=True, default=1)
+    # 回放缓存只供 sudo 的幂等服务读取；避免管理员通过视图/RPC 读取潜在敏感响应内容。
+    response_json = fields.Text(required=True, groups="base.group_no_one")
 
     _sql_constraints = [
         (
@@ -27,6 +44,8 @@ class GinlongAPIIdempotency(models.Model):
 
 
 class GinlongAPIRateCounter(models.Model):
+    """在数据库中共享每个 API 用户、接口及固定时间窗口的计数。"""
+
     _name = "ginlong.api.rate.counter"
     _description = "Ginlong API Rate Counter"
     _order = "window_start desc, id desc"
@@ -46,6 +65,8 @@ class GinlongAPIRateCounter(models.Model):
 
 
 class ResConfigSettings(models.TransientModel):
+    """在 Odoo 设置页维护入站阈值和五个回传 Endpoint。"""
+
     _inherit = "res.config.settings"
 
     ginlong_api01_rate_limit = fields.Integer(
@@ -75,6 +96,7 @@ class ResConfigSettings(models.TransientModel):
         "ginlong_api05_rate_limit", "ginlong_api07_rate_limit",
     )
     def _check_ginlong_rate_limits(self):
+        """拒绝非正的限流值，避免配置后意外封锁接口或失去限流。"""
         for settings in self:
             if any(value < 1 for value in (
                 settings.ginlong_api01_rate_limit,
@@ -86,6 +108,14 @@ class ResConfigSettings(models.TransientModel):
 
     @api.model
     def get_ginlong_api_rate_limit(self, api_code):
+        """读取一个 Ginlong 入站 API 的限流阈值并处理无效配置。
+
+        参数：
+            api_code: API01、API03、API05 或 API07。
+
+        返回：
+            大于等于 1 的请求/秒整数；配置损坏时使用该接口默认值。
+        """
         defaults = {"API01": 10, "API03": 10, "API05": 10, "API07": 100}
         if api_code not in defaults:
             raise ValueError("Unknown Ginlong API code: %s" % api_code)
@@ -99,6 +129,14 @@ class ResConfigSettings(models.TransientModel):
 
     @api.model
     def get_ginlong_callback_endpoint(self, api_code):
+        """读取指定人工回传 API 的管理员配置 URL。
+
+        参数：
+            api_code: API02、API04、API06、API08 或 API10。
+
+        返回：
+            包含去除首尾空格后 URL 的字典；未配置时 URL 为空字符串。
+        """
         if api_code not in {"API02", "API04", "API06", "API08", "API10"}:
             raise ValueError("Unknown Ginlong callback API code: %s" % api_code)
         params = self.env["ir.config_parameter"].sudo()

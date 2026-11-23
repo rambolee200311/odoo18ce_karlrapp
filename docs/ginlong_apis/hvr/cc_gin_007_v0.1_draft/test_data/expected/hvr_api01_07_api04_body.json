@@ -1,0 +1,15 @@
+{
+  "owner": "HVR-GIN005-OWNER",
+  "action": "CREATE",
+  "inboundOrderNo": "HVR-GIN005-IN-001",
+  "snList": [
+    {
+      "productSN": "HVR-GIN005-SN-001",
+      "quantity": 1.0,
+      "palletCode": "HVR-GIN005-PALLET-001",
+      "productCode": "HVR-GIN005-P001",
+      "operator": "KR-OP-BROWSER",
+      "operationTime": "2026-11-19 07:32:31"
+    }
+  ]
+}

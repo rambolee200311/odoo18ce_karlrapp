@@ -1,17 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- 日志视图只读展示请求结果，并允许管理员定位原业务单据。 -->
     <record id="view_ginlong_api_log_list" model="ir.ui.view">
         <field name="name">world.depot.api.log.ginlong.list</field>
         <field name="model">world.depot.api.log</field>
         <field name="arch" type="xml">
             <list create="0" edit="0" delete="0">
                 <field name="request_time"/>
-                <field name="request_path"/>
+                <field name="ginlong_api_code" string="API"/>
+                <field name="ginlong_business_key" string="业务唯一键" optional="show"/>
+                <field name="request_path" string="接口地址" optional="hide"/>
                 <field name="source_record"/>
                 <field name="status"/>
                 <field name="code"/>
                 <field name="msg"/>
             </list>
+        </field>
+    </record>
+
+    <record id="view_ginlong_api_log_search" model="ir.ui.view">
+        <field name="name">world.depot.api.log.ginlong.search</field>
+        <field name="model">world.depot.api.log</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="ginlong_api_code" string="API 编号"/>
+                <field name="ginlong_business_key" string="业务唯一键"
+                       filter_domain="[('ginlong_business_key', 'ilike', self)]"/>
+                <field name="request_data" string="请求内容"/>
+                <field name="code" string="错误码"/>
+                <field name="status" string="状态"/>
+                <field name="request_time" string="请求时间"/>
+                <filter name="ginlong_errors" string="失败请求" domain="[('status', '=', 'error')]"/>
+                <filter name="ginlong_successes" string="成功请求" domain="[('status', '=', 'success')]"/>
+                <group expand="0" string="分组">
+                    <filter name="group_by_api" string="API" context="{'group_by': 'ginlong_api_code'}"/>
+                    <filter name="group_by_status" string="状态" context="{'group_by': 'status'}"/>
+                    <filter name="group_by_day" string="日期" context="{'group_by': 'request_time:day'}"/>
+                </group>
+            </search>
         </field>
     </record>
 
@@ -27,6 +53,8 @@
                 <sheet>
                     <group>
                         <group>
+                            <field name="ginlong_api_code" string="API"/>
+                            <field name="ginlong_business_key" string="业务唯一键"/>
                             <field name="request_time"/>
                             <field name="request_path"/>
                             <field name="source_record"/>
@@ -58,10 +86,89 @@
         <field name="res_model">world.depot.api.log</field>
         <field name="view_mode">list,form</field>
         <field name="view_id" ref="view_ginlong_api_log_list"/>
-        <field name="domain">['|', ('request_path', 'ilike', '/api/ginlong/'), ('request_path', 'ilike', 'TPL_')]</field>
+        <field name="search_view_id" ref="view_ginlong_api_log_search"/>
+        <field name="domain">[('ginlong_api_code', 'in', ['API01', 'API02', 'API03', 'API04', 'API05', 'API06', 'API07', 'API08', 'API09', 'API10'])]</field>
         <field name="context">{'create': False, 'edit': False, 'delete': False}</field>
     </record>
 
+    <!-- 幂等结果只供管理员排查重复请求和处理状态，页面保持只读。 -->
+    <record id="view_ginlong_api_idempotency_search" model="ir.ui.view">
+        <field name="name">ginlong.api.idempotency.search</field>
+        <field name="model">ginlong.api.idempotency</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="api_code" string="接口编号"/>
+                <field name="business_key" string="业务键"/>
+                <field name="action" string="Action"/>
+                <field name="direction" string="方向"/>
+                <field name="state" string="状态"/>
+                <field name="create_date" string="创建时间"/>
+                <field name="write_date" string="最后更新"/>
+                <filter name="state_processing" string="处理中" domain="[('state', '=', 'processing')]"/>
+                <filter name="state_succeeded" string="成功" domain="[('state', '=', 'succeeded')]"/>
+                <filter name="state_failed" string="失败" domain="[('state', '=', 'failed')]"/>
+                <filter name="state_unknown" string="结果未知" domain="[('state', '=', 'unknown')]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_ginlong_api_idempotency_list" model="ir.ui.view">
+        <field name="name">ginlong.api.idempotency.list</field>
+        <field name="model">ginlong.api.idempotency</field>
+        <field name="arch" type="xml">
+            <list create="0" edit="0" delete="0">
+                <field name="api_code" string="接口编号"/>
+                <field name="direction" string="方向"/>
+                <field name="action" string="Action"/>
+                <field name="business_key" string="业务键"/>
+                <field name="event_key" string="事件键" optional="hide"/>
+                <field name="request_fingerprint" string="请求指纹" optional="hide"/>
+                <field name="state" string="状态"/>
+                <field name="attempt_count" string="尝试次数"/>
+                <field name="create_date" string="创建时间" optional="hide"/>
+                <field name="write_date" string="最后更新"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_ginlong_api_idempotency_form" model="ir.ui.view">
+        <field name="name">ginlong.api.idempotency.form</field>
+        <field name="model">ginlong.api.idempotency</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="api_code" string="接口编号"/>
+                            <field name="direction" string="方向"/>
+                            <field name="action" string="Action"/>
+                            <field name="state" string="状态"/>
+                            <field name="attempt_count" string="尝试次数"/>
+                        </group>
+                        <group>
+                            <field name="business_key" string="业务键"/>
+                            <field name="event_key" string="事件键"/>
+                            <field name="request_fingerprint" string="请求指纹"/>
+                            <field name="create_date" string="创建时间"/>
+                            <field name="write_date" string="最后更新"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_ginlong_api_idempotency" model="ir.actions.act_window">
+        <field name="name">Ginlong 幂等记录</field>
+        <field name="res_model">ginlong.api.idempotency</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_ginlong_api_idempotency_search"/>
+        <field name="view_id" ref="view_ginlong_api_idempotency_list"/>
+        <field name="domain">[('api_code', 'in', ['API01', 'API02', 'API03', 'API04', 'API05', 'API06', 'API07', 'API08', 'API09', 'API10'])]</field>
+        <field name="context">{'create': False, 'edit': False, 'delete': False}</field>
+    </record>
+
+    <!-- 设置入口复用 Odoo res.config.settings，不另建 Endpoint 配置模型。 -->
     <record id="action_ginlong_settings" model="ir.actions.act_window">
         <field name="name">Ginlong API 设置</field>
         <field name="res_model">res.config.settings</field>
@@ -98,12 +205,14 @@
         <field name="domain">[('ginlong_owner_code', '!=', False)]</field>
     </record>
 
-    <menuitem id="menu_ginlong_root" name="Ginlong APIs"
-              parent="worlddepot.world_depot_logi_menu" sequence="1200"/>
+    <!-- Ginlong 菜单只聚合现有业务单据、产品、设置和 API 日志入口。 -->
+    <menuitem id="menu_ginlong_root" name="Ginlong APIs" sequence="20"/>
     <menuitem id="menu_ginlong_settings" name="API 设置" parent="menu_ginlong_root"
               action="action_ginlong_settings" groups="base.group_system" sequence="10"/>
     <menuitem id="menu_ginlong_logs" name="API 日志" parent="menu_ginlong_root"
               action="action_ginlong_api_logs" groups="stock.group_stock_manager" sequence="20"/>
+    <menuitem id="menu_ginlong_idempotency" name="幂等记录" parent="menu_ginlong_root"
+              action="action_ginlong_api_idempotency" groups="stock.group_stock_manager" sequence="25"/>
     <menuitem id="menu_ginlong_inbound_orders" name="入库单" parent="menu_ginlong_root"
               action="action_ginlong_inbound_orders" groups="stock.group_stock_user" sequence="30"/>
     <menuitem id="menu_ginlong_outbound_orders" name="出库单" parent="menu_ginlong_root"

@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR07-20261123-BONDED-RAW-NOSN-04",
+  "warehouse": "KRWH",
+  "businessType": "保税_海外收货入库",
+  "remark": "CC-GIN-007 HVR-04 保税原材料省略 SN 清单",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 12
+    }
+  ]
+}
