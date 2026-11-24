@@ -2,7 +2,7 @@
 {
     'name': 'Ginlong APIs',
     'summary': 'Ginlong API integration for World Depot',
-    'version': '18.0.2.0.40',
+    'version': '18.0.2.0.42',
     'category': 'Inventory/Inventory',
     'depends': ['worlddepot'],
     'data': [

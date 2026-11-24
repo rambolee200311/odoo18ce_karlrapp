@@ -259,9 +259,14 @@ class GinlongSimulationController(http.Controller):
             api_user = getattr(request, "api_user", False)
             if not api_user:
                 raise make_error("AUTH01", details="Authenticated API user is not configured")
-            if api_code == "API07":
-                # Add 先核对 owner + productCode，再进入通用幂等重放，确保重复新增返回业务失败。
-                services.ensure_api07_add_is_new(request.env, api_user, payload)
+            def resolve_lifecycle(lifecycle_env):
+                """在给定 ORM Environment 中解析当前有效业务生命周期。"""
+                lifecycle_user = lifecycle_env["world.depot.api.user"].sudo().browse(api_user.id)
+                return services.lifecycle_event_key(lifecycle_env, lifecycle_user, api_code, payload)
+
+            lifecycle_resolver = (
+                resolve_lifecycle if api_code in {"API01", "API03", "API05", "API07"} else None
+            )
             if api_code == "API07":
                 # 幂等器需要内部的 success=True 判断并保存真实业务结果；
                 # 先执行幂等，再裁剪为 Ginlong 三字段响应，避免错误地回滚成功 Add。
@@ -270,6 +275,7 @@ class GinlongSimulationController(http.Controller):
                     api_code,
                     payload,
                     lambda: handler(request.env, api_user, payload),
+                    lifecycle_resolver=lifecycle_resolver,
                 )
                 result = self._success_body(api_code, result)
             else:
@@ -278,6 +284,7 @@ class GinlongSimulationController(http.Controller):
                     api_code,
                     payload,
                     lambda: self._success_body(api_code, handler(request.env, api_user, payload)),
+                    lifecycle_resolver=lifecycle_resolver,
                 )
             return self._json_response(result)
         except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:

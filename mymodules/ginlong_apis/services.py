@@ -6,6 +6,7 @@
 
 import json
 import math
+import uuid
 from decimal import Decimal, InvalidOperation
 
 from odoo import Command, fields
@@ -13,7 +14,6 @@ from odoo.exceptions import ValidationError
 from odoo.tools.float_utils import float_compare, float_round
 
 from .errors import make_error
-from .idempotency import has_successful_once_for_business_key
 from .product_identity import ginlong_internal_code
 from .validators.payload_validator import validate_payload
 
@@ -375,8 +375,7 @@ def ensure_api07_add_is_new(env, api_user, payload):
     返回：
         Add 对应组合不存在时返回 None；重复 Add 时抛出统一错误组件生成的 GinlongAPIError。
 
-    此检查在控制器执行通用幂等重放前运行，因此完全相同和内容变化的重复 Add 都会失败；
-    Edit 不受影响。归档产品也视为已存在，避免再次创建相同货主产品。
+    此检查只把 active 变体视为有效对象；归档变体由 API07 Add 流程恢复原记录。
     """
     _project(api_user)
     internal_action, _external_action = _inbound_action("API07", payload)
@@ -388,15 +387,67 @@ def ensure_api07_add_is_new(env, api_user, payload):
     existing = env["product.product"].sudo().with_context(active_test=False).search([
         ("ginlong_owner_code", "=", owner_code),
         ("ginlong_product_code", "=", product_code),
+        ("active", "=", True),
     ], limit=1)
-    # HVR 重置或历史数据清理可能删除产品却遗留已提交的成功记录；
-    # 在通用幂等器按指纹重放旧响应前，仍须按一次性业务键拒绝重复 Add。
-    if existing or has_successful_once_for_business_key(env, "API07", payload):
+    if existing:
         raise make_error(
             "IDM07",
             owner=owner_code,
             productCode=product_code,
         )
+
+
+def _ensure_order_add_is_new(env, api_code, payload):
+    """按全局订单号检查当前有效 Order；不把 project 纳入 Add 唯一键。"""
+    specifications = {
+        "API01": ("world.depot.inbound.order", "reference", "inboundOrderNo"),
+        "API03": ("world.depot.outbound.order", "reference", "outboundOrderNo"),
+        "API05": ("world.depot.stocktake.order", "count_order_no", "countOrderNo"),
+    }
+    model_name, field_name, payload_name = specifications[api_code]
+    business_key = payload[payload_name]
+    if env[model_name].sudo().search([(field_name, "=", business_key), ("state", "!=", "cancel")], limit=1):
+        raise make_error(
+            "IDM02", api_code=api_code, action="add",
+            key=payload_name, business_key=business_key,
+        )
+
+
+def lifecycle_event_key(env, api_user, api_code, payload):
+    """提供当前入站业务周期的事件键，并先按适配器规则拒绝有效 Add。
+
+    通用幂等器只保存此不透明键；订单模型、状态及 project 范围均由本业务适配器解析。
+    """
+    project = _project(api_user)
+    action, _external_action = _inbound_action(api_code, payload)
+    if action == "CREATE":
+        if api_code == "API07":
+            ensure_api07_add_is_new(env, api_user, payload)
+        else:
+            _ensure_order_add_is_new(env, api_code, payload)
+        # 每次允许的新 Add 均开启独立生命周期，不会重放取消/归档前的成功响应。
+        return "%s:add:%s" % (api_code, uuid.uuid4().hex)
+
+    if action == "DELETE" and api_code in {"API01", "API03", "API05"}:
+        # 只读取当前接口的业务键；字典值若直接索引 payload，会提前求值其他 API 的字段。
+        specifications = {
+            "API01": ("world.depot.inbound.order", "reference", "inboundOrderNo", "project"),
+            "API03": ("world.depot.outbound.order", "reference", "outboundOrderNo", "project"),
+            "API05": ("world.depot.stocktake.order", "count_order_no", "countOrderNo", "project_id"),
+        }
+        model_name, key_field, payload_field, project_field = specifications[api_code]
+        key_value = payload[payload_field]
+        domain = [(key_field, "=", key_value), (project_field, "=", project.id)]
+        model = env[model_name].sudo()
+        current = model.search(domain + [("state", "!=", "cancel")], order="id desc", limit=1)
+        if not current:
+            # 取消后的重发仍使用该业务记录身份，使同一次 Delete 可安全重放；
+            # 后续 Add 创建新记录后，新的 Delete 会获得不同身份。
+            current = model.search(domain + [("state", "=", "cancel")], order="id desc", limit=1)
+        if current:
+            return "%s:delete:%s" % (api_code, current.id)
+        return "%s:delete:missing:%s:%s" % (api_code, project.id, key_value)
+    return False
 
 
 def _find_product(env, product_code, owner_code=None):
@@ -436,9 +487,15 @@ def _find_product(env, product_code, owner_code=None):
     return products
 
 
-def _find_one_by_reference(model, project, reference, label):
-    """在当前 WMS 项目内按单据编号查找且只接受唯一记录。"""
-    records = model.sudo().search([("project", "=", project.id), ("reference", "=", reference)], limit=2)
+def _find_one_by_reference(model, project, reference, label, include_cancelled=False):
+    """在当前 WMS 项目内定位单据；仅 Delete 重试可包含已取消记录。"""
+    base_domain = [("project", "=", project.id), ("reference", "=", reference)]
+    order_model = model.sudo()
+    records = order_model.search(base_domain + [("state", "!=", "cancel")], limit=2)
+    if not records and include_cancelled:
+        records = order_model.search(
+            base_domain + [("state", "=", "cancel")], order="id desc", limit=2,
+        )
     if len(records) != 1:
         reason = "not found" if not records else "ambiguous"
         raise ValidationError("%s %s is %s in this WMS project" % (label, reference, reason))
@@ -461,10 +518,15 @@ def api01(env, api_user, payload):
     order_model = env["world.depot.inbound.order"]
 
     if action == "DELETE":
-        order = _find_one_by_reference(order_model, project, payload["inboundOrderNo"], "Inbound order")
+        order = _find_one_by_reference(
+            order_model, project, payload["inboundOrderNo"], "Inbound order", include_cancelled=True,
+        )
         if order.state != "cancel":
             order.write({"state": "cancel"})
         return {"success": True, "data": {"action": external_action, "inboundOrderNo": payload["inboundOrderNo"]}}
+
+    if action == "CREATE":
+        _ensure_order_add_is_new(env, "API01", payload)
 
     order = False
     if action == "UPDATE":
@@ -567,10 +629,15 @@ def api03(env, api_user, payload):
     order_model = env["world.depot.outbound.order"]
 
     if action == "DELETE":
-        order = _find_one_by_reference(order_model, project, payload["outboundOrderNo"], "Outbound order")
+        order = _find_one_by_reference(
+            order_model, project, payload["outboundOrderNo"], "Outbound order", include_cancelled=True,
+        )
         if order.state != "cancel":
             order.write({"state": "cancel"})
         return {"success": True, "data": {"action": external_action, "outboundOrderNo": payload["outboundOrderNo"]}}
+
+    if action == "CREATE":
+        _ensure_order_add_is_new(env, "API03", payload)
 
     order = False
     if action == "UPDATE":
@@ -685,10 +752,15 @@ def api05(env, api_user, payload):
     task_model = env["world.depot.stocktake.order"].sudo()
 
     if action == "DELETE":
-        tasks = task_model.search([
+        task_domain = [
             ("project_id", "=", project.id),
             ("count_order_no", "=", payload["countOrderNo"]),
-        ], limit=2)
+        ]
+        tasks = task_model.search(task_domain + [("state", "!=", "cancel")], limit=2)
+        if not tasks:
+            tasks = task_model.search(
+                task_domain + [("state", "=", "cancel")], order="id desc", limit=2,
+            )
         if len(tasks) != 1:
             reason = "not found" if not tasks else "ambiguous"
             raise ValidationError("Stocktake task %s is %s in this WMS project" % (payload["countOrderNo"], reason))
@@ -699,10 +771,13 @@ def api05(env, api_user, payload):
     details = payload.get("details")
     sn_list = payload.get("snList")
     task = False
+    if action == "CREATE":
+        _ensure_order_add_is_new(env, "API05", payload)
     if action == "UPDATE":
         tasks = task_model.search([
             ("project_id", "=", project.id),
             ("count_order_no", "=", payload["countOrderNo"]),
+            ("state", "!=", "cancel"),
         ], limit=2)
         if len(tasks) != 1:
             reason = "not found" if not tasks else "ambiguous"
@@ -921,7 +996,7 @@ def api07(env, api_user, payload):
     ).product_template_value_ids.filtered(
         lambda value: value.product_attribute_value_id == attribute_values
     )
-    products = template.product_variant_ids.filtered(
+    products = template.with_context(active_test=False).product_variant_ids.filtered(
         lambda product: bool(product.product_template_attribute_value_ids & owner_ptavs)
     )
     if len(products) != 1:
@@ -932,6 +1007,9 @@ def api07(env, api_user, payload):
     if internal_action == "UPDATE":
         # 编辑已有 Owner 变体时更新其共享模板，所有同 productCode 货主变体继续读取同一套产品属性。
         template.write(template_values)
+    if internal_action == "CREATE" and not product.active:
+        # 已归档组合仍保留历史引用；恢复原变体可保住关联并复用 Odoo 原生变体身份。
+        product.write({"active": True})
     product.write({
         "ginlong_owner_code": owner_code,
         "ginlong_product_code": code,

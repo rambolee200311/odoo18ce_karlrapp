@@ -37,7 +37,7 @@ class GinlongAPIIdempotency(models.Model):
     _sql_constraints = [
         (
             "uniq_request",
-            "unique(api_code, business_key, request_fingerprint)",
+            "unique(api_code, business_key, event_key, request_fingerprint)",
             "This Ginlong API request has already been processed.",
         ),
     ]

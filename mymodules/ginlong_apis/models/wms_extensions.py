@@ -32,9 +32,26 @@ class InboundOrder(models.Model):
     ginlong_warehouse_code = fields.Char(copy=False)
     ginlong_business_type = fields.Char(copy=False, index=True)
     ginlong_sn_list_json = fields.Text(copy=False)
+    # 仅当前有效单据占用业务编号；取消后为空值，使新生命周期能复用同一单号。
+    ginlong_effective_reference = fields.Char(
+        compute="_compute_ginlong_effective_reference", store=True, index=True, copy=False,
+    )
     ginlong_receipt_detail_ids = fields.One2many(
         "ginlong.inbound.receipt.detail", "order_id", string="Ginlong 收货明细",
     )
+
+    _sql_constraints = [
+        ("ginlong_effective_reference_unique", "unique(ginlong_effective_reference)",
+         "An active inbound order already uses this reference."),
+    ]
+
+    @api.depends("reference", "state")
+    def _compute_ginlong_effective_reference(self):
+        """让非取消入库单在全局编号范围内原子占用 reference。"""
+        for order in self:
+            order.ginlong_effective_reference = (
+                order.reference if order.reference and order.state != "cancel" else False
+            )
 
 
 class InboundOrderProductPallet(models.Model):
@@ -76,6 +93,10 @@ class OutboundOrder(models.Model):
     ginlong_contact = fields.Char(copy=False)
     ginlong_contact_email = fields.Char(copy=False)
     ginlong_shipping_method = fields.Char(copy=False)
+    # 取消后释放单号；不把 project 纳入并发唯一身份。
+    ginlong_effective_reference = fields.Char(
+        compute="_compute_ginlong_effective_reference", store=True, index=True, copy=False,
+    )
     ginlong_shipment_detail_ids = fields.One2many(
         "ginlong.outbound.shipment.detail", "order_id", string="Ginlong 发货明细",
     )
@@ -83,6 +104,19 @@ class OutboundOrder(models.Model):
     ginlong_pallet_qty_manual = fields.Float(string="手工托盘数", copy=False)
     ginlong_gross_weight_manual_enabled = fields.Boolean(string="手工覆盖毛重", copy=False)
     ginlong_gross_weight_manual = fields.Float(string="手工毛重（kg）", copy=False)
+
+    _sql_constraints = [
+        ("ginlong_effective_reference_unique", "unique(ginlong_effective_reference)",
+         "An active outbound order already uses this reference."),
+    ]
+
+    @api.depends("reference", "state")
+    def _compute_ginlong_effective_reference(self):
+        """让非取消出库单在全局编号范围内原子占用 reference。"""
+        for order in self:
+            order.ginlong_effective_reference = (
+                order.reference if order.reference and order.state != "cancel" else False
+            )
 
 
 class OutboundOrderProduct(models.Model):
@@ -119,6 +153,25 @@ class ProductProduct(models.Model):
 
     ginlong_owner_code = fields.Char(copy=False, index=True)
     ginlong_product_code = fields.Char(string="Ginlong Product Code", copy=False, index=True)
+    ginlong_effective_identity = fields.Char(
+        compute="_compute_ginlong_effective_identity", store=True, index=True, copy=False,
+    )
+
+    _sql_constraints = [
+        ("ginlong_effective_identity_unique", "unique(ginlong_effective_identity)",
+         "An active product already uses this Ginlong owner and product code."),
+    ]
+
+    @api.depends("ginlong_owner_code", "ginlong_product_code", "active")
+    def _compute_ginlong_effective_identity(self):
+        """编码 active owner+productCode，归档时释放组合且不冲突于分隔符。"""
+        for product in self:
+            owner = product.ginlong_owner_code or ""
+            code = product.ginlong_product_code or ""
+            product.ginlong_effective_identity = (
+                "%s:%s%s" % (len(owner), owner, code)
+                if product.active and owner and code else False
+            )
 
 
 class ProductTemplate(models.Model):

@@ -560,6 +560,23 @@ class StocktakeOrder(models.Model):
         default="Add",
         copy=False,
     )
+    # 只让有效盘点指令占用全局 countOrderNo，取消历史继续保留。
+    ginlong_effective_count_order_no = fields.Char(
+        compute="_compute_ginlong_effective_count_order_no", store=True, index=True, copy=False,
+    )
+
+    _sql_constraints = [
+        ("ginlong_effective_count_order_no_unique", "unique(ginlong_effective_count_order_no)",
+         "An active stocktake order already uses this count order number."),
+    ]
+
+    @api.depends("count_order_no", "state")
+    def _compute_ginlong_effective_count_order_no(self):
+        """让未取消盘点单原子占用全局盘点编号。"""
+        for order in self:
+            order.ginlong_effective_count_order_no = (
+                order.count_order_no if order.count_order_no and order.state != "cancel" else False
+            )
 
     def action_ginlong_api10(self):
         """手动回传当前盘点单已选中的仓库实盘结果。

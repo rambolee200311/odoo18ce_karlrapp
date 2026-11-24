@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR08-20261124-API01-001",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "CC-GIN-008 生命周期 HVR API01 首次报文",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 1
+    }
+  ]
+}

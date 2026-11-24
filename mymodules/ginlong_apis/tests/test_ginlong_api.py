@@ -14,6 +14,7 @@ from unittest.mock import patch
 from urllib.parse import urlsplit
 
 import requests
+from psycopg2 import IntegrityError
 
 from odoo import SUPERUSER_ID, api, fields
 from odoo.exceptions import AccessError, ValidationError
@@ -1090,8 +1091,8 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(outbound.ginlong_owner_id, owner2)
         self.assertEqual(outbound.outbound_order_product_ids[0].product_id, other_product)
 
-    def test_api07_orphaned_success_record_rejects_same_and_changed_add(self):
-        """验证产品记录被清理后，成功幂等键仍阻止 Add 重放旧成功结果。"""
+    def test_api07_orphaned_success_record_does_not_block_new_product_lifecycle(self):
+        """验证遗留成功幂等记录不阻止当前无有效产品时开启新生命周期。"""
         product_code = "GINLONG-API07-ORPHAN-%s" % uuid.uuid4().hex
         payload = {
             "action": "Add", "owner": "OWNER-01", "productCode": product_code,
@@ -1107,13 +1108,24 @@ class TestGinlongAPI(TransactionCase):
             self.env, "API07", payload, lambda: dict(stale_result), direction="inbound",
         )
         self.assertTrue(idempotency.has_successful_once_for_business_key(self.env, "API07", payload))
-        self.assertEqual(
-            idempotency.execute(
-                self.env, "API07", payload,
-                lambda: self.fail("相同 Payload 不应再次执行"), direction="inbound",
+
+        result = idempotency.execute(
+            self.env, "API07", payload,
+            lambda: services.api07(self.env, self.api_user, payload),
+            direction="inbound",
+            lifecycle_resolver=lambda current_env: services.lifecycle_event_key(
+                current_env,
+                current_env["world.depot.api.user"].sudo().browse(self.api_user.id),
+                "API07", payload,
             ),
-            stale_result,
         )
+        self.assertTrue(result["success"])
+        product = self.env["product.product"].sudo().with_context(active_test=False).search([
+            ("ginlong_owner_code", "=", payload["owner"]),
+            ("ginlong_product_code", "=", product_code),
+        ])
+        self.assertEqual(len(product), 1)
+        self.assertNotEqual(product.id, stale_result["data"]["id"])
 
         for duplicate_payload in (
             payload,
@@ -1127,18 +1139,15 @@ class TestGinlongAPI(TransactionCase):
                 "IDM07: 重复新增，冲突键(owner, productCode)",
             )
 
-        self.assertFalse(self.env["product.product"].sudo().search([
-            ("ginlong_owner_code", "=", payload["owner"]),
-            ("ginlong_product_code", "=", product_code),
-        ]))
+        self.assertTrue(product.exists())
         row = self.env["ginlong.api.idempotency"].sudo().search([
             ("api_code", "=", "API07"),
             ("business_key", "=", '["%s","%s"]' % (payload["owner"], product_code)),
         ])
-        self.assertEqual(len(row), 1)
-        self.assertEqual(row.state, "succeeded")
-        self.assertEqual(row.attempt_count, 1)
-        self.assertEqual(json.loads(row.response_json), stale_result)
+        self.assertEqual(len(row), 2)
+        self.assertTrue(all(item.state == "succeeded" for item in row))
+        self.assertIn(stale_result, [json.loads(item.response_json) for item in row])
+        self.assertIn(result, [json.loads(item.response_json) for item in row])
 
     def test_api07_product_form_sets_template_sn_tracking_and_rejects_other_values(self):
         """验证 productForm 决定模板级 SN tracking，其他枚举值被拒绝。"""
@@ -1900,8 +1909,8 @@ class TestGinlongAPI(TransactionCase):
 
     def test_idempotency_replays_canonical_request_once(self):
         """验证相同规范化请求只执行一次并复用成功结果。"""
-        # API01 Add 的验收规则要求重复 Add 返回错误；此处用 API03 验证通用 once 重放能力。
-        payload = {"outboundOrderNo": "GINLONG-IDEM-001", "action": "Add", "remark": "outbound"}
+        # API01/03/05 的重复 Add 是业务冲突；此处用 API07 验证通用 once 请求的并发/重试重放能力。
+        payload = {"owner": "IDEM-OWNER", "productCode": "GINLONG-IDEM-001", "action": "Add"}
         calls = []
 
         def operation():
@@ -1909,13 +1918,14 @@ class TestGinlongAPI(TransactionCase):
             calls.append(True)
             return {"success": True, "data": {"id": 123}}
 
-        first = idempotency.execute(self.env, "API03", payload, operation)
+        first = idempotency.execute(self.env, "API07", payload, operation)
         replay_payload = dict(reversed(list(payload.items())))
-        replay = idempotency.execute(self.env, "API03", replay_payload, operation)
+        replay = idempotency.execute(self.env, "API07", replay_payload, operation)
         self.assertEqual(first, replay)
         self.assertEqual(len(calls), 1)
         self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
-            ("api_code", "=", "API03"), ("business_key", "=", "GINLONG-IDEM-001"),
+            ("api_code", "=", "API07"),
+            ("business_key", "=", idempotency._business_key("API07", payload)),
         ]), 1)
         self.assertEqual(
             idempotency._canonical_json({"a": 1, "b": [1, 2]}),
@@ -3042,7 +3052,7 @@ class TestGinlongAPI(TransactionCase):
         """验证新增/删除重放安全、编辑重复提交仍执行且 API09 不建持久记录。"""
         once_cases = [
             ("API01", {"inboundOrderNo": "IDEM-IN-DEL", "action": "Del"}),
-            ("API03", {"outboundOrderNo": "IDEM-OUT-ADD", "action": "Add"}),
+            ("API03", {"outboundOrderNo": "IDEM-OUT-DEL", "action": "Del"}),
             ("API05", {"countOrderNo": "IDEM-COUNT-DEL", "action": "Del"}),
             ("API07", {"owner": "IDEM-OWNER", "productCode": "IDEM-PRODUCT", "action": "Add"}),
         ]
@@ -3487,6 +3497,417 @@ class TestGinlongAPI(TransactionCase):
             self.assertTrue(logs[1].success and logs[2].success)
         finally:
             receiver.close()
+
+
+    def test_ginlong_effective_identity_constraints_and_archived_product_restore(self):
+        """验证有效身份约束、取消释放全局单号及归档产品恢复原变体。"""
+        marker = uuid.uuid4().hex
+        second_owner = self.env["res.partner"].create({
+            "name": "Ginlong lifecycle owner %s" % marker,
+            "is_company": True,
+            "ginlong_owner_code": "LIFECYCLE-OWNER-%s" % marker,
+        })
+        second_project = self.env["project.project"].create({
+            "name": "Ginlong lifecycle project %s" % marker,
+            "owner": second_owner.id,
+            "category": self.env.ref("product.product_category_all").id,
+            "warehouse": self.warehouse.id,
+            "is_check_origin_doc": False,
+        })
+        second_api_user = self.env["world.depot.api.user"].create({
+            "user_id": self.api_user.user_id.id,
+            "project": second_project.id,
+        })
+
+        order_payload = self._api01("GINLONG-LIFECYCLE-%s" % marker)
+        first = services.api01(self.env, self.api_user, order_payload)
+        old_order = self.env["world.depot.inbound.order"].browse(first["data"]["id"])
+        self.assertEqual(old_order.ginlong_effective_reference, order_payload["inboundOrderNo"])
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as cross_project_conflict:
+            services.api01(self.env, second_api_user, order_payload)
+        self.assertEqual(cross_project_conflict.exception.error_code, "IDM02")
+        self.assertFalse(self.env["world.depot.inbound.order"].search([
+            ("reference", "=", order_payload["inboundOrderNo"]),
+            ("project", "=", second_project.id),
+        ]))
+
+        # API03/API05 也按模型全局单号判重；project 仍决定新记录归属和 Delete/Edit 范围。
+        outbound_payload = {
+            "owner": "OWNER-01", "action": "Add", "outboundOrderNo": "GINLONG-LIFECYCLE-OUT-%s" % marker,
+            "warehouse": self.warehouse.code, "businessType": "STANDARD",
+            "customer": self.recipient.name,
+            "details": [{
+                "productCode": self.product.ginlong_product_code,
+                "productName": self.product.name,
+                "specificationModel": self.product.product_tmpl_id.ginlong_specification_model,
+                "quantity": 1, "net_wt_machine": 1, "net_wt_total": 1, "pack_qty": 1,
+                "pallet_qty": 1, "pallet_len": 1, "pallet_wid": 1, "pallet_hgt": 1,
+                "unit_vol": 1, "pack_unit": "BOX", "pack_wt": 1, "pallet_total_wt": 1,
+                "total_vol": 1, "carton_wt_total": 1, "gross_wt_total": 1,
+            }],
+        }
+        services.api03(self.env, self.api_user, outbound_payload)
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as outbound_cross_project_conflict:
+            services.api03(self.env, second_api_user, outbound_payload)
+        self.assertEqual(outbound_cross_project_conflict.exception.error_code, "IDM02")
+        self.assertFalse(self.env["world.depot.outbound.order"].search([
+            ("reference", "=", outbound_payload["outboundOrderNo"]),
+            ("project", "=", second_project.id),
+        ]))
+
+        stocktake_payload = {
+            "owner": "OWNER-01", "action": "Add", "countOrderNo": "GINLONG-LIFECYCLE-COUNT-%s" % marker,
+            "warehouse": self.warehouse.code,
+            "details": [{
+                "productCode": self.product.ginlong_product_code,
+                "productName": self.product.name,
+                "specificationModel": self.product.product_tmpl_id.ginlong_specification_model,
+                "quantity": 1,
+            }],
+            "snList": [{
+                "productSN": "GINLONG-LIFECYCLE-SN-%s" % marker, "quantity": 1,
+                "palletCode": "GINLONG-LIFECYCLE-PALLET-%s" % marker,
+                "productCode": self.product.ginlong_product_code,
+                "productName": self.product.name,
+                "specificationModel": self.product.product_tmpl_id.ginlong_specification_model,
+            }],
+        }
+        services.api05(self.env, self.api_user, stocktake_payload)
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as stocktake_cross_project_conflict:
+            services.api05(self.env, second_api_user, stocktake_payload)
+        self.assertEqual(stocktake_cross_project_conflict.exception.error_code, "IDM02")
+        self.assertFalse(self.env["world.depot.stocktake.order"].search([
+            ("count_order_no", "=", stocktake_payload["countOrderNo"]),
+            ("project_id", "=", second_project.id),
+        ]))
+
+        product_payload = {
+            "action": "Add", "owner": "OWNER-01",
+            "productCode": self.product.ginlong_product_code,
+            "productName": self.product.name,
+            "specificationModel": self.product.product_tmpl_id.ginlong_specification_model,
+            "unit": self.product.product_tmpl_id.ginlong_unit,
+            "productForm": self.product.product_tmpl_id.ginlong_product_form,
+        }
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as product_cross_project_conflict:
+            services.api07(self.env, second_api_user, product_payload)
+        self.assertEqual(product_cross_project_conflict.exception.error_code, "IDM07")
+
+        old_order.write({"state": "cancel"})
+        self.assertFalse(old_order.ginlong_effective_reference)
+        re_added = services.api01(self.env, self.api_user, order_payload)
+        new_order = self.env["world.depot.inbound.order"].browse(re_added["data"]["id"])
+        self.assertNotEqual(old_order, new_order)
+        self.assertEqual(new_order.ginlong_effective_reference, order_payload["inboundOrderNo"])
+        self.assertEqual(self.env["world.depot.inbound.order"].search_count([
+            ("reference", "=", order_payload["inboundOrderNo"]), ("state", "!=", "cancel"),
+        ]), 1)
+        with self.assertRaises(IntegrityError):
+            with self.env.cr.savepoint():
+                self.env["world.depot.inbound.order"].sudo().create({
+                    "project": second_project.id,
+                    "reference": order_payload["inboundOrderNo"],
+                })
+
+        outbound_key = "GINLONG-LIFECYCLE-OUT-DB-%s" % marker
+        self.env["world.depot.outbound.order"].sudo().create({
+            "project": self.project.id, "unload_company": self.recipient.id,
+            "reference": outbound_key,
+        })
+        with self.assertRaises(IntegrityError):
+            with self.env.cr.savepoint():
+                self.env["world.depot.outbound.order"].sudo().create({
+                    "project": second_project.id, "unload_company": self.recipient.id,
+                    "reference": outbound_key,
+                })
+
+        stocktake_key = "GINLONG-LIFECYCLE-COUNT-DB-%s" % marker
+        stocktake_values = {
+            "count_order_no": stocktake_key, "project_id": self.project.id,
+            "owner_code": "OWNER-01", "warehouse_code": self.warehouse.code,
+        }
+        self.env["world.depot.stocktake.order"].sudo().create(stocktake_values)
+        with self.assertRaises(IntegrityError):
+            with self.env.cr.savepoint():
+                self.env["world.depot.stocktake.order"].sudo().create(dict(
+                    stocktake_values, project_id=second_project.id,
+                ))
+
+        restore_payload = {
+            "action": "Add", "owner": "OWNER-01",
+            "productCode": "GINLONG-ARCHIVE-%s" % marker,
+            "productName": "Ginlong archived product %s" % marker,
+            "specificationModel": "ARCHIVE-MODEL",
+            "unit": self.env.ref("uom.product_uom_unit").name,
+            "productForm": "原材料",
+            "weight": 0,
+        }
+        created = services.api07(self.env, self.api_user, restore_payload)
+        archived_product = self.env["product.product"].browse(created["data"]["id"])
+        original_id = archived_product.id
+        archived_product.write({"active": False})
+        self.assertFalse(archived_product.ginlong_effective_identity)
+        restored = services.api07(self.env, self.api_user, restore_payload)
+        self.assertEqual(restored["data"]["id"], original_id)
+        self.assertTrue(archived_product.active)
+        self.assertTrue(archived_product.ginlong_effective_identity)
+        archived_product.write({"active": False})
+        # 只省略契约中的可选重量；报文指纹改变，但不改写模板的已保存重量事实。
+        changed_restore_payload = dict(restore_payload)
+        changed_restore_payload.pop("weight")
+        restored_with_changes = services.api07(self.env, self.api_user, changed_restore_payload)
+        self.assertEqual(restored_with_changes["data"]["id"], original_id)
+        self.assertTrue(archived_product.active)
+        self.assertEqual(archived_product.ginlong_weight, 0)
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as active_product_conflict:
+            services.api07(self.env, self.api_user, changed_restore_payload)
+        self.assertEqual(active_product_conflict.exception.error_code, "IDM07")
+
+        duplicate_variant = services.api07(self.env, self.api_user, dict(
+            restore_payload,
+            productCode="GINLONG-ARCHIVE-DUPLICATE-%s" % marker,
+            productName="Ginlong duplicate-key variant %s" % marker,
+        ))
+        duplicate_variant_record = self.env["product.product"].browse(duplicate_variant["data"]["id"])
+        with self.assertRaises(IntegrityError):
+            with self.env.cr.savepoint():
+                duplicate_variant_record.write({"ginlong_product_code": restore_payload["productCode"]})
+
+    def test_concurrent_effective_add_conflict_is_mapped_by_fresh_orm_state(self):
+        """用独立事务竞争四类有效键，确认唯一冲突被映射为业务重复错误。"""
+        dbname = self.env.cr.dbname
+        marker = uuid.uuid4().hex
+        owner_code = "CONCURRENT-OWNER-%s" % marker
+        product_code = "CONCURRENT-RAW-%s" % marker
+        api_user_id = False
+        refs = {
+            "API01": "CONCURRENT-IN-%s" % marker,
+            "API03": "CONCURRENT-OUT-%s" % marker,
+            "API05": "CONCURRENT-COUNT-%s" % marker,
+            "API07": "CONCURRENT-PRODUCT-%s" % marker,
+        }
+        payloads = {
+            "API01": {
+                "owner": owner_code, "action": "Add", "inboundOrderNo": refs["API01"],
+                "warehouse": "KRWH", "businessType": "STANDARD",
+                "details": [{
+                    "productCode": product_code, "productName": "Concurrent material",
+                    "specificationModel": "CONCURRENT-MODEL", "quantity": 1,
+                }],
+            },
+            "API03": {
+                "owner": owner_code, "action": "Add", "outboundOrderNo": refs["API03"],
+                "warehouse": "KRWH", "businessType": "STANDARD", "customer": "Concurrent recipient %s" % marker,
+                "details": [{
+                    "productCode": product_code, "productName": "Concurrent material",
+                    "specificationModel": "CONCURRENT-MODEL", "quantity": 1,
+                    "net_wt_machine": 1, "net_wt_total": 1, "pack_qty": 1, "pallet_qty": 1,
+                    "pallet_len": 1, "pallet_wid": 1, "pallet_hgt": 1, "unit_vol": 1,
+                    "pack_unit": "BOX", "pack_wt": 1, "pallet_total_wt": 1, "total_vol": 1,
+                    "carton_wt_total": 1, "gross_wt_total": 1,
+                }],
+            },
+            "API05": {
+                "owner": owner_code, "action": "Add", "countOrderNo": refs["API05"],
+                "warehouse": "KRWH", "details": [{
+                    "productCode": product_code, "productName": "Concurrent material",
+                    "specificationModel": "CONCURRENT-MODEL", "quantity": 1,
+                }], "snList": [{
+                    "productSN": product_code, "quantity": 1, "palletCode": "CONCURRENT-COUNT-PALLET",
+                    "productCode": product_code, "productName": "Concurrent material",
+                    "specificationModel": "CONCURRENT-MODEL",
+                }],
+            },
+            "API07": {
+                "owner": owner_code, "action": "Add", "productCode": refs["API07"],
+                "productName": "Concurrent product", "specificationModel": "CONCURRENT-PRODUCT-MODEL",
+                "unit": "台", "productForm": "原材料",
+            },
+        }
+        handlers = {
+            "API01": services.api01,
+            "API03": services.api03,
+            "API05": services.api05,
+            "API07": services.api07,
+        }
+        fixture_ids = {}
+        scenario_keys = {api_code: [] for api_code in payloads}
+
+        try:
+            with self._new_committed_cursor(dbname) as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {})
+                owner = env["res.partner"].sudo().create({
+                    "name": owner_code, "is_company": True, "ginlong_owner_code": owner_code,
+                })
+                warehouse = env.ref("stock.warehouse0")
+                project = env["project.project"].sudo().create({
+                    "name": "Ginlong concurrent project %s" % marker,
+                    "owner": owner.id,
+                    "category": env.ref("product.product_category_all").id,
+                    "warehouse": warehouse.id,
+                    "is_check_origin_doc": False,
+                })
+                recipient = env["res.partner"].sudo().create({
+                    "name": "Concurrent recipient %s" % marker,
+                    "is_company": True, "source_project_id": project.id,
+                })
+                api_user = env["world.depot.api.user"].sudo().create({
+                    "user_id": env.ref("base.user_admin").id, "project": project.id,
+                })
+                common_product = services.api07(env, api_user, {
+                    "action": "Add", "owner": owner_code, "productCode": product_code,
+                    "productName": "Concurrent material", "specificationModel": "CONCURRENT-MODEL",
+                    "unit": env.ref("uom.product_uom_unit").name, "productForm": "原材料",
+                })
+                fixture_ids = {
+                    "owner": owner.id, "project": project.id, "recipient": recipient.id,
+                    "api_user": api_user.id,
+                    "common_product": common_product["data"]["id"],
+                }
+                api_user_id = api_user.id
+                cr.commit()
+
+            # 每种接口使用独立业务键，避免上一轮成功记录影响下一轮并发场景。
+            for api_code, base_payload in payloads.items():
+                for different_payload in (False, True):
+                    payload = deepcopy(base_payload)
+                    case_suffix = "DIFF" if different_payload else "SAME"
+                    key_field = {
+                        "API01": "inboundOrderNo",
+                        "API03": "outboundOrderNo",
+                        "API05": "countOrderNo",
+                        "API07": "productCode",
+                    }[api_code]
+                    payload[key_field] = "%s-%s" % (payload[key_field], case_suffix)
+                    scenario_keys[api_code].append(payload[key_field])
+                    gate = threading.Barrier(2)
+                    gate_state = threading.local()
+                    outcomes = []
+                    outcome_lock = threading.Lock()
+
+                    def worker(worker_index):
+                        """在独立 ORM 事务中经过同一生命周期适配器并竞争业务写入。"""
+                        worker_payload = deepcopy(payload)
+                        if different_payload and worker_index == 2:
+                            # 两个并发 Add 使用同一业务键，但只有第二个报文的非键字段不同。
+                            if api_code == "API07":
+                                worker_payload["productName"] += " changed"
+                            else:
+                                worker_payload["remark"] = "concurrent payload variant"
+                        try:
+                            with self._new_committed_cursor(dbname) as cr:
+                                env = api.Environment(cr, SUPERUSER_ID, {})
+                                api_user_record = env["world.depot.api.user"].sudo().browse(api_user_id)
+
+                                def resolve_lifecycle(current_env):
+                                    """先完成有效记录检查，再同步两事务进入业务处理。"""
+                                    current_user = current_env["world.depot.api.user"].sudo().browse(api_user_id)
+                                    event_key = services.lifecycle_event_key(
+                                        current_env, current_user, api_code, worker_payload,
+                                    )
+                                    # 竞争屏障只用于同步第一次有效性检查；完整性冲突后的新 ORM 复查不能再次等待。
+                                    if not getattr(gate_state, "passed", False):
+                                        gate.wait(timeout=10)
+                                        gate_state.passed = True
+                                    return event_key
+
+                                result = idempotency.execute(
+                                    env, api_code, worker_payload,
+                                    lambda: handlers[api_code](env, api_user_record, worker_payload),
+                                    lifecycle_resolver=resolve_lifecycle,
+                                )
+                                cr.commit()
+                                item = ("success", result)
+                        except ginlong_errors.GinlongAPIError as error:
+                            item = ("error", error.error_code, str(error))
+                        except Exception as error:  # 测试须将未预期的数据库/系统错误暴露为失败断言。
+                            item = ("unexpected", repr(error))
+                        with outcome_lock:
+                            outcomes.append(item)
+
+                    with patch.object(
+                        self.env.registry,
+                        "cursor",
+                        side_effect=lambda *args, **kwargs: self._new_committed_cursor(dbname),
+                    ):
+                        threads = [
+                            threading.Thread(target=worker, args=(index,), name="ginlong-effective-%s-%s" % (api_code, index))
+                            for index in (1, 2)
+                        ]
+                        for thread in threads:
+                            thread.start()
+                        for thread in threads:
+                            thread.join(20)
+                    self.assertFalse(any(thread.is_alive() for thread in threads), api_code)
+                    self.assertEqual([item[0] for item in outcomes].count("success"), 1, (api_code, outcomes))
+                    self.assertEqual([item[0] for item in outcomes].count("error"), 1, (api_code, outcomes))
+                    self.assertFalse([item for item in outcomes if item[0] == "unexpected"], (api_code, outcomes))
+                    expected_duplicate = "IDM07" if api_code == "API07" else "IDM02"
+                    self.assertTrue(
+                        any(item[0] == "error" and item[1] == expected_duplicate for item in outcomes),
+                        (api_code, outcomes),
+                    )
+
+                    with self._new_committed_cursor(dbname) as cr:
+                        env = api.Environment(cr, SUPERUSER_ID, {})
+                        if api_code == "API01":
+                            active_count = env["world.depot.inbound.order"].sudo().search_count([
+                                ("reference", "=", payload[key_field]), ("state", "!=", "cancel"),
+                            ])
+                        elif api_code == "API03":
+                            active_count = env["world.depot.outbound.order"].sudo().search_count([
+                                ("reference", "=", payload[key_field]), ("state", "!=", "cancel"),
+                            ])
+                        elif api_code == "API05":
+                            active_count = env["world.depot.stocktake.order"].sudo().search_count([
+                                ("count_order_no", "=", payload[key_field]), ("state", "!=", "cancel"),
+                            ])
+                        else:
+                            active_count = env["product.product"].sudo().search_count([
+                                ("ginlong_owner_code", "=", owner_code),
+                                ("ginlong_product_code", "=", payload[key_field]), ("active", "=", True),
+                            ])
+                        self.assertEqual(active_count, 1, api_code)
+
+        finally:
+            # 仅移除本测试随机前缀下由测试自身提交的业务和幂等夹具。
+            with self._new_committed_cursor(dbname) as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {})
+                env["world.depot.inbound.order"].sudo().search([
+                    ("reference", "in", scenario_keys["API01"]),
+                ]).unlink()
+                env["world.depot.outbound.order"].sudo().search([
+                    ("reference", "in", scenario_keys["API03"]),
+                ]).unlink()
+                env["world.depot.stocktake.order"].sudo().search([
+                    ("count_order_no", "in", scenario_keys["API05"]),
+                ]).unlink()
+                variants = env["product.product"].sudo().with_context(active_test=False).search([
+                    ("ginlong_product_code", "in", [product_code] + scenario_keys["API07"]),
+                ])
+                templates = variants.mapped("product_tmpl_id")
+                if variants:
+                    variants.unlink()
+                if templates:
+                    templates.unlink()
+                for api_code in ("API01", "API03", "API05"):
+                    for code in scenario_keys[api_code]:
+                        env["ginlong.api.idempotency"].sudo().search([
+                            ("api_code", "=", api_code),
+                            ("business_key", "=", code),
+                        ]).unlink()
+                for api_code in ("API07",):
+                    for code in [product_code] + scenario_keys[api_code]:
+                        key = idempotency._canonical_json([owner_code, code])
+                        env["ginlong.api.idempotency"].sudo().search([
+                            ("api_code", "=", api_code), ("business_key", "=", key),
+                        ]).unlink()
+                if fixture_ids:
+                    env["world.depot.api.user"].sudo().browse(fixture_ids.get("api_user")).unlink()
+                    env["project.project"].sudo().browse(fixture_ids.get("project")).unlink()
+                    env["res.partner"].sudo().browse(fixture_ids.get("recipient")).unlink()
+                    env["res.partner"].sudo().browse(fixture_ids.get("owner")).unlink()
+                cr.commit()
 
 
 @tagged("post_install", "-at_install")
@@ -4528,28 +4949,49 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
 
-        # Del 不会重置已经成功的 Add 业务键；修改版 Add 也不能覆盖已取消的原单。
+        # 取消后先用相同报文开启新生命周期，再取消并用不同报文再次创建。
+        same_payload_re_add = self._post("/api/ginlong/TPL_Pending_Receipt_Note", payload)
+        self.assertEqual(json.loads(same_payload_re_add.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        same_lifecycle_order = self.env["world.depot.inbound.order"].search([
+            ("reference", "=", reference), ("state", "!=", "cancel"),
+        ])
+        self.assertEqual(len(same_lifecycle_order), 1)
+        second_delete = self._post("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
+        self.assertEqual(json.loads(second_delete.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        self.assertEqual(same_lifecycle_order.state, "cancel")
+
         re_add_payload = deepcopy(payload)
         re_add_payload["remark"] = marker + " after delete"
         re_add_payload["details"][0]["quantity"] = 9
         re_add_response = self._post("/api/ginlong/TPL_Pending_Receipt_Note", re_add_payload)
         re_add_body = json.loads(re_add_response.text)
         self.assertEqual(re_add_response.status_code, 200)
-        self.assertEqual(re_add_body["returnStatus"], "N")
-        self.assertEqual(re_add_body["exceptionInfo"], "IDM02: 重复新增，冲突键: inboundOrderNo")
+        self.assertEqual(re_add_body["returnStatus"], "Y")
+        self.assertEqual(re_add_body["exceptionInfo"], "OK")
+        repeated_re_add = self._post("/api/ginlong/TPL_Pending_Receipt_Note", re_add_payload)
+        self.assertEqual(json.loads(repeated_re_add.text)["returnStatus"], "N")
+        self.assertEqual(json.loads(repeated_re_add.text)["exceptionInfo"],
+                         "IDM02: 重复新增，冲突键: inboundOrderNo")
         self.env.invalidate_all()
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
         self.assertEqual(order.remark, marker)
-        self.assertEqual(self.env["world.depot.inbound.order"].search_count([
+        lifecycle_orders = self.env["world.depot.inbound.order"].search([
             ("reference", "=", reference),
-        ]), 1)
+        ], order="id")
+        self.assertEqual(len(lifecycle_orders), 3)
+        self.assertEqual(lifecycle_orders[0].state, "cancel")
+        self.assertEqual(lifecycle_orders[1].state, "cancel")
+        self.assertEqual(lifecycle_orders[2].state, "new")
+        self.assertEqual(lifecycle_orders[2].remark, marker + " after delete")
         self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
             ("api_code", "=", "API01"), ("business_key", "=", reference), ("action", "=", "add"),
-        ]), 1)
+        ]), 3)
         self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
             ("api_code", "=", "API01"), ("business_key", "=", reference), ("action", "=", "del"),
-        ]), 1)
+        ]), 2)
 
         invalid = deepcopy(payload)
         invalid["inboundOrderNo"] = marker + "-INVALID"
@@ -4621,13 +5063,15 @@ class TestGinlongHttpAPI(HttpCase):
                 "gross_wt_total": 1,
             }],
         }
-        first_response = self._post("/api/ginlong/TPL_Pending_Delivery_Note", payload)
-        replay_response = self._post("/api/ginlong/TPL_Pending_Delivery_Note", payload)
-        first, replay = json.loads(first_response.text), json.loads(replay_response.text)
+        first_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", payload)
+        duplicate_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", payload)
+        first, duplicate = json.loads(first_response.text), json.loads(duplicate_response.text)
         self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(replay_response.status_code, 200)
-        self.assertTrue(first["success"] and replay["success"])
-        self.assertEqual(first["data"]["id"], replay["data"]["id"])
+        self.assertEqual(duplicate_response.status_code, 400)
+        self.assertTrue(first["success"])
+        self.assertEqual(duplicate["returnStatus"], "N")
+        self.assertEqual(duplicate["exceptionInfo"],
+                         "IDM02: 重复新增，冲突键: outboundOrderNo")
         self.env.invalidate_all()
         order = self.env["world.depot.outbound.order"].search([("reference", "=", reference)])
         self.assertEqual(len(order), 1)
@@ -4635,8 +5079,8 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(order.unload_company, self.http_recipient)
 
         edit = dict(payload, action="Edit", productName=self.http_product.name)
-        first_edit = self._post("/api/ginlong/TPL_Pending_Delivery_Note", edit)
-        repeated_edit = self._post("/api/ginlong/TPL_Pending_Delivery_Note", edit)
+        first_edit = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", edit)
+        repeated_edit = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", edit)
         self.assertEqual(first_edit.status_code, 200)
         self.assertEqual(repeated_edit.status_code, 200)
         self.assertTrue(json.loads(first_edit.text)["success"])
@@ -4645,7 +5089,7 @@ class TestGinlongHttpAPI(HttpCase):
         invalid_pair = deepcopy(payload)
         invalid_pair.update({"owner": marker + "-UNKNOWN-OWNER", "outboundOrderNo": marker + "-REJECT"})
         invalid_pair["details"][0]["productCode"] = marker + "-UNKNOWN-PRODUCT"
-        rejected = self._post("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
+        rejected = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
         self.assertEqual(rejected.status_code, 400)
         rejected_body = json.loads(rejected.text)
         self.assertEqual(set(rejected_body), {"returnStatus", "exceptionInfo", "operationTime"})
@@ -4671,11 +5115,13 @@ class TestGinlongHttpAPI(HttpCase):
             "productName": self.http_product.name, "specificationModel": "HTTP-MODEL",
             "unit": self.env.ref("uom.product_uom_unit").name, "productForm": "原材料",
         })
-        retried = self._post("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
-        repeated_retry = self._post("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
+        retried = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
+        repeated_retry = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
         self.assertEqual(retried.status_code, 200)
         self.assertTrue(json.loads(retried.text)["success"])
-        self.assertEqual(json.loads(retried.text)["data"]["id"], json.loads(repeated_retry.text)["data"]["id"])
+        self.assertEqual(repeated_retry.status_code, 400)
+        self.assertEqual(json.loads(repeated_retry.text)["exceptionInfo"],
+                         "IDM02: 重复新增，冲突键: outboundOrderNo")
         self.env.invalidate_all()
         rejected_order = self.env["world.depot.outbound.order"].search([
             ("reference", "=", marker + "-REJECT"),
@@ -4691,13 +5137,42 @@ class TestGinlongHttpAPI(HttpCase):
             "outboundOrderNo": reference, "warehouse": self.http_warehouse.code,
             "businessType": "STANDARD", "remark": marker,
         }
-        delete_first = self._post("/api/ginlong/TPL_Pending_Delivery_Note", delete)
-        delete_replay = self._post("/api/ginlong/TPL_Pending_Delivery_Note", delete)
+        delete_first = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
+        delete_replay = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
         self.assertEqual(delete_first.status_code, 200)
         self.assertEqual(json.loads(delete_first.text), json.loads(delete_replay.text))
         self.env.invalidate_all()
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
+
+        same_payload_re_add = self._post_with_rate_reset(
+            "/api/ginlong/TPL_Pending_Delivery_Note", payload,
+        )
+        self.assertTrue(json.loads(same_payload_re_add.text)["success"])
+        second_delete = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
+        self.assertEqual(json.loads(second_delete.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        intermediate_orders = self.env["world.depot.outbound.order"].search([
+            ("reference", "=", reference),
+        ], order="id")
+        self.assertEqual(len(intermediate_orders), 2)
+        self.assertEqual(intermediate_orders[1].state, "cancel")
+
+        re_add = dict(payload, remark=marker + " after cancel")
+        re_add_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", re_add)
+        self.assertTrue(json.loads(re_add_response.text)["success"])
+        repeated_re_add = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", re_add)
+        self.assertEqual(repeated_re_add.status_code, 400)
+        self.assertEqual(json.loads(repeated_re_add.text)["exceptionInfo"],
+                         "IDM02: 重复新增，冲突键: outboundOrderNo")
+        self.env.invalidate_all()
+        lifecycle_orders = self.env["world.depot.outbound.order"].search([
+            ("reference", "=", reference),
+        ], order="id")
+        self.assertEqual(len(lifecycle_orders), 3)
+        self.assertEqual(lifecycle_orders[0].state, "cancel")
+        self.assertEqual(lifecycle_orders[1].state, "cancel")
+        self.assertNotEqual(lifecycle_orders[2].state, "cancel")
 
     def test_http_api05_add_repeatable_edit_and_delete(self):
         """真实 HTTP 验证 API05 指令 Add/重复 Edit/Delete 的 ORM 结果。"""
@@ -4728,11 +5203,12 @@ class TestGinlongHttpAPI(HttpCase):
             }],
         }
         first_response = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
-        replay_response = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
-        first, replay = json.loads(first_response.text), json.loads(replay_response.text)
+        duplicate_response = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
+        first, duplicate = json.loads(first_response.text), json.loads(duplicate_response.text)
         self.assertEqual(first_response.status_code, 200)
-        self.assertTrue(first["success"] and replay["success"])
-        self.assertEqual(first["data"]["id"], replay["data"]["id"])
+        self.assertTrue(first["success"])
+        self.assertEqual(duplicate["returnStatus"], "N")
+        self.assertEqual(duplicate["exceptionInfo"], "IDM02: 重复新增，冲突键: countOrderNo")
         self.env.invalidate_all()
         order = self.env["world.depot.stocktake.order"].search([("count_order_no", "=", count_order_no)])
         self.assertEqual(len(order), 1)
@@ -4756,6 +5232,32 @@ class TestGinlongHttpAPI(HttpCase):
         self.env.invalidate_all()
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
+
+        same_payload_re_add = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
+        self.assertTrue(json.loads(same_payload_re_add.text)["success"])
+        second_delete = self._post("/api/ginlong/TPL_Stocktake_Order", delete)
+        self.assertEqual(json.loads(second_delete.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        lifecycles = self.env["world.depot.stocktake.order"].search([
+            ("count_order_no", "=", count_order_no),
+        ], order="id")
+        self.assertEqual(len(lifecycles), 2)
+        self.assertEqual(lifecycles[0].state, "cancel")
+        self.assertEqual(lifecycles[1].state, "cancel")
+
+        re_add_payload = dict(payload, remark=marker + " re-added with changed payload")
+        re_add_response = self._post("/api/ginlong/TPL_Stocktake_Order", re_add_payload)
+        self.assertTrue(json.loads(re_add_response.text)["success"])
+        repeat_re_add = self._post("/api/ginlong/TPL_Stocktake_Order", re_add_payload)
+        self.assertEqual(json.loads(repeat_re_add.text)["returnStatus"], "N")
+        self.env.invalidate_all()
+        lifecycles = self.env["world.depot.stocktake.order"].search([
+            ("count_order_no", "=", count_order_no),
+        ], order="id")
+        self.assertEqual(len(lifecycles), 3)
+        self.assertEqual(lifecycles[0].state, "cancel")
+        self.assertEqual(lifecycles[1].state, "cancel")
+        self.assertNotEqual(lifecycles[2].state, "cancel")
 
     def test_http_api07_add_duplicate_rejection_and_repeatable_edit(self):
         """真实 HTTP 验证 API07 重复 Add 拒绝、Edit 可重复执行和跨货主新增。"""
@@ -5143,8 +5645,101 @@ class TestGinlongHttpAPI(HttpCase):
             self.assertEqual(log["msg"], "重复新增，冲突键(owner, productCode)")
             self.assertEqual(set(json.loads(log["response_data"])), protocol_fields)
 
-    def test_http_api01_idempotency_processing_error_uses_idm01(self):
-        """真实 HTTP 验证幂等处理中错误码、日志及订单数据不变。"""
+    def test_http_api07_archived_product_add_restores_same_variant_lifecycle(self):
+        """通过真实 Ginlong HTTP 路由验证归档产品复用原变体并开启新幂等周期。"""
+        marker = self.http_test_marker
+        owner_code = self.http_owner.ginlong_owner_code
+        product_code = "HTTP-ARCHIVE-%s" % self.http_suffix
+        payload = {
+            "action": "Add",
+            "owner": owner_code,
+            "productCode": product_code,
+            "productName": marker + " archived API07 product",
+            "specificationModel": "HTTP-ARCHIVE-MODEL",
+            "unit": self.env.ref("uom.product_uom_unit").name,
+            "productForm": "原材料",
+            "weight": 0,
+        }
+        protocol_fields = {"returnStatus", "exceptionInfo", "operationTime"}
+
+        first = self._post("/api/ginlong/TPL_Product_Master", payload)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(json.loads(first.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        product = self.env["product.product"].sudo().with_context(active_test=False).search([
+            ("ginlong_owner_code", "=", owner_code),
+            ("ginlong_product_code", "=", product_code),
+        ])
+        self.assertEqual(len(product), 1)
+        original_id = product.id
+
+        active_duplicate = self._post("/api/ginlong/TPL_Product_Master", payload)
+        active_duplicate_body = json.loads(active_duplicate.text)
+        self.assertEqual(active_duplicate.status_code, 200)
+        self.assertEqual(active_duplicate_body["returnStatus"], "N")
+        self.assertTrue(active_duplicate_body["exceptionInfo"].startswith("IDM07:"))
+
+        def set_archived(archived):
+            """在 HttpCase 当前 ORM 事务切换归档状态，供后续真实 HTTP 请求读取。"""
+            self.env["product.product"].sudo().browse(original_id).write({
+                "active": not archived,
+            })
+
+        set_archived(True)
+        same_readd = self._post("/api/ginlong/TPL_Product_Master", payload)
+        same_readd_body = json.loads(same_readd.text)
+        self.assertEqual(same_readd.status_code, 200)
+        self.assertEqual(set(same_readd_body), protocol_fields)
+        self.assertEqual(same_readd_body["returnStatus"], "Y")
+        self.env.invalidate_all()
+        restored = self.env["product.product"].sudo().with_context(active_test=False).browse(original_id)
+        self.assertTrue(restored.active)
+
+        duplicate = self._post("/api/ginlong/TPL_Product_Master", payload)
+        duplicate_body = json.loads(duplicate.text)
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(duplicate_body["returnStatus"], "N")
+        self.assertTrue(duplicate_body["exceptionInfo"].startswith("IDM07:"))
+
+        # 改变指纹但不改写模板事实：省略可选 weight，验证历史成功行不会拦截新周期。
+        set_archived(True)
+        changed_payload = dict(payload)
+        changed_payload.pop("weight")
+        changed_readd = self._post("/api/ginlong/TPL_Product_Master", changed_payload)
+        changed_readd_body = json.loads(changed_readd.text)
+        self.assertEqual(changed_readd.status_code, 200)
+        self.assertEqual(set(changed_readd_body), protocol_fields)
+        self.assertEqual(changed_readd_body["returnStatus"], "Y")
+
+        changed_duplicate = self._post("/api/ginlong/TPL_Product_Master", changed_payload)
+        self.assertEqual(json.loads(changed_duplicate.text)["returnStatus"], "N")
+        self.env.invalidate_all()
+        products = self.env["product.product"].sudo().with_context(active_test=False).search([
+            ("ginlong_owner_code", "=", owner_code),
+            ("ginlong_product_code", "=", product_code),
+        ])
+        self.assertEqual(len(products), 1)
+        self.assertEqual(products.id, original_id)
+        self.assertTrue(products.active)
+        business_key = json.dumps([owner_code, product_code], ensure_ascii=False, separators=(",", ":"))
+        lifecycle_rows = self.env["ginlong.api.idempotency"].sudo().search([
+            ("api_code", "=", "API07"),
+            ("direction", "=", "inbound"),
+            ("business_key", "=", business_key),
+            ("action", "=", "add"),
+        ], order="id")
+        self.assertEqual(len(lifecycle_rows), 3)
+        self.assertTrue(all(row.state == "succeeded" and row.attempt_count == 1 for row in lifecycle_rows))
+        self.assertEqual(len(set(lifecycle_rows.mapped("event_key"))), 3)
+        self.assertEqual(len(set(lifecycle_rows.mapped("request_fingerprint"))), 2)
+
+        logs = self._committed_api_logs(marker)
+        self.assertEqual(len(logs), 6)
+        self.assertEqual(len([row for row in logs if row["code"] == "IDM07"]), 3)
+        self.assertTrue(all(set(json.loads(row["response_data"])) == protocol_fields for row in logs))
+
+    def test_http_api01_active_order_conflict_precedes_old_idempotency_row(self):
+        """真实 HTTP 验证有效订单冲突优先于历史幂等记录并保持数据不变。"""
         marker = self.http_test_marker
         reference = marker + "-IDEMPOTENCY"
         payload = {
@@ -5176,7 +5771,8 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(repeated.status_code, 200)
         self.assertEqual(set(repeated_body), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(repeated_body["returnStatus"], "N")
-        self.assertEqual(repeated_body["exceptionInfo"], "IDM01: 幂等事件正在处理中")
+        # 业务 Order 已存在且有效时，适配器先按业务唯一键返回重复 Add 冲突。
+        self.assertEqual(repeated_body["exceptionInfo"], "IDM02: 重复新增，冲突键: inboundOrderNo")
         self.env.invalidate_all()
         self.assertEqual(self.env["world.depot.inbound.order"].search_count([
             ("reference", "=", reference),
@@ -5187,10 +5783,10 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(record.state, "processing")
 
         logs = self._committed_api_logs(marker)
-        idempotency_logs = [log for log in logs if log["code"] == "IDM01"]
+        idempotency_logs = [log for log in logs if log["code"] == "IDM02"]
         self.assertEqual(len(idempotency_logs), 1)
-        self.assertEqual(idempotency_logs[0]["msg"], "幂等事件正在处理中")
-        self.assertIn("already processing", idempotency_logs[0]["exception_details"])
+        self.assertEqual(idempotency_logs[0]["msg"], "重复新增，冲突键: inboundOrderNo")
+        self.assertIn(reference, idempotency_logs[0]["exception_details"])
 
     def test_http_api01_rate_rejection_and_storage_failure_are_distinct(self):
         """真实 HTTP 验证限流拒绝与共享计数存储故障使用不同错误码。"""

@@ -9,7 +9,8 @@
       "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "del": "del", "delete": "del"},
       "default_strategy": "once",
       "actions": {"add": "once", "edit": "repeatable", "del": "once"},
-      "duplicate_action_errors": {"add": "IDM02"}
+      "duplicate_action_errors": {"add": "IDM02"},
+      "duplicate_by_history": true
     },
     "API02": {
       "direction": "outbound",

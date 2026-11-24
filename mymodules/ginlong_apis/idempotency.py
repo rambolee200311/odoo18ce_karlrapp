@@ -142,15 +142,15 @@ def duplicate_error_for_completed_request(env, api_code, payload):
         payload: 已校验且已规范化 Action 的请求报文。
 
     返回：
-        若配置的 Action 已有成功记录，返回统一错误对象；否则返回 None。
+    若无业务生命周期适配器且配置的 Action 已有成功记录，返回统一错误对象；否则返回 None。
 
     此策略按业务键而非请求指纹判重，确保 Add 的修改版重发也不会覆盖原单。
-    未配置该策略的 once 操作继续沿用成功结果重放行为。
+    有生命周期适配器时，由其先检查业务记录有效性；不能用历史记录代替当前业务状态。
     """
     config = _api_rules(api_code, "inbound")
     action = _action_key(config, payload)
     error_code = config.get("duplicate_action_errors", {}).get(action)
-    if not action or not error_code:
+    if not action or not error_code or not config.get("duplicate_by_history", False):
         return None
     strategy = config.get("actions", {}).get(action, config.get("default_strategy", "once"))
     if strategy != "once":
@@ -262,7 +262,7 @@ def _run_once(env, api_code, direction, action, business_key, event_key, fingerp
     return result
 
 
-def execute(env, api_code, payload, operation, direction=None, context=None):
+def execute(env, api_code, payload, operation, direction=None, context=None, lifecycle_resolver=None):
     """按配置执行一次性或可重复操作，并原子保存可重放结果。
 
     参数：
@@ -272,6 +272,7 @@ def execute(env, api_code, payload, operation, direction=None, context=None):
         operation: 实际业务处理或 HTTP 发送函数。
         direction: inbound 或 outbound；省略时使用静态配置方向。
         context: 出站事件来源模型、记录编号、业务键及版本字段。
+        lifecycle_resolver: 可选业务适配器，签名为 resolver(env)；检查有效记录并返回不透明事件键。
 
     返回：
         首次执行结果或相同成功事件的已保存结果。repeatable Action 每次调用均执行。
@@ -291,11 +292,11 @@ def execute(env, api_code, payload, operation, direction=None, context=None):
             return operation()
         if strategy != "once":
             raise ValueError("Unsupported idempotency strategy %r for %s" % (strategy, api_code))
-        # 按 Action 配置先拦截已经成功的业务键；API01 Add 不允许以旧成功响应冒充本次成功。
-        duplicate_error = duplicate_error_for_completed_request(env, api_code, payload)
-        if duplicate_error:
-            raise duplicate_error
-        event_key = False
+        # 业务有效性由 adapter 判断。没有 adapter 的通用调用使用稳定请求事件键，
+        # 避免 NULL 唯一键在 PostgreSQL 中允许并发插入多个相同请求。
+        event_key = lifecycle_resolver(env) if lifecycle_resolver else "request:%s" % hashlib.sha256(
+            (api_code + ":" + business_key).encode("utf-8")
+        ).hexdigest()
     else:
         strategy = config.get("strategy", "once")
         if strategy != "once":
@@ -304,9 +305,16 @@ def execute(env, api_code, payload, operation, direction=None, context=None):
         business_key = event_key
 
     fingerprint = _fingerprint(payload)
+    if direction == "inbound" and not lifecycle_resolver:
+        # 通用调用缺少业务状态读取能力时，只能按配置的成功历史拒绝 Add；
+        # Ginlong HTTP 入口总会传入 adapter，取消/归档后的新生命周期不会受历史记录阻断。
+        duplicate_error = duplicate_error_for_completed_request(env, api_code, payload)
+        if duplicate_error:
+            raise duplicate_error
     domain = [
         ("api_code", "=", api_code),
         ("business_key", "=", business_key),
+        ("event_key", "=", event_key or False),
         ("request_fingerprint", "=", fingerprint),
     ]
     model = env["ginlong.api.idempotency"].sudo()
@@ -324,22 +332,26 @@ def execute(env, api_code, payload, operation, direction=None, context=None):
         )
     except _BusinessRejected as rejected:
         # 并发不同 Payload 可能各自取得幂等占位；失败方若观察到同业务键已成功，归类为重复新增。
-        duplicate_error = duplicate_error_for_completed_request(env, api_code, payload) if direction == "inbound" else None
+        duplicate_error = (
+            duplicate_error_for_completed_request(env, api_code, payload)
+            if direction == "inbound" and not lifecycle_resolver else None
+        )
         if duplicate_error:
             raise duplicate_error
         return rejected.result
     except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
         raise
     except IntegrityError:
-        # 唯一约束使相同指纹的并发调用只允许一个执行；竞争者读取其已提交结果。
+        # 同一事件的并发重试先尝试复用竞争事务已提交的结果。
         result = _find_committed_result(env, domain)
         if result is not None:
-            duplicate_error = duplicate_error_for_completed_request(env, api_code, payload) if direction == "inbound" else None
-            if duplicate_error:
-                raise duplicate_error
             return result
-        # 不同指纹可能竞争同一业务唯一键；若胜出事务已完成，按业务键策略返回重复错误。
-        duplicate_error = duplicate_error_for_completed_request(env, api_code, payload) if direction == "inbound" else None
-        if duplicate_error:
-            raise duplicate_error
+        # 只有 adapter 能确认当前业务身份已被占用时，才将数据库冲突翻译为重复业务键。
+        # 其他 IntegrityError 仍保留原分类，避免把无关约束故障伪装成重复请求。
+        if direction == "inbound" and lifecycle_resolver:
+            # 有效键冲突可能发生在另一事务提交后；当前事务的快照无法看到新记录。
+            # 新 ORM 游标让业务适配器判断是否确为重复有效键，避免泄露数据库异常。
+            with env.registry.cursor() as cr:
+                current_env = api.Environment(cr, SUPERUSER_ID, {})
+                lifecycle_resolver(current_env)
         raise
