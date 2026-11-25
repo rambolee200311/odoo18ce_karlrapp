@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR01-CC011-20261125-AUTH-01",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "CC-GIN-011 API01人工回归无效Token",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 1
+    }
+  ]
+}
