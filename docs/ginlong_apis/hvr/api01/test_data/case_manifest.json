@@ -1,0 +1,46 @@
+{
+  "package_version": "v3 (superseded)",
+  "status": "SUPERSEDED_NOT_FOR_CC_GIN_007",
+  "archive_note": "Current CC-GIN-007 HVR is docs/ginlong_apis/hvr/cc_gin_007_v0.1_draft/; this v3 package used STANDARD and does not validate bonded snList processing.",
+  "cases": [
+    {
+      "package_version": "v3",
+      "id": "HVR01-29",
+      "title": "主场景：三托盘混装三种产品，核对托盘归属与数量",
+      "payload": "test_data/archive/superseded_cc_gin_007_v3_20261123/payloads/hvr01_29.json",
+      "curl": "test_data/archive/superseded_cc_gin_007_v3_20261123/curl/hvr01_29.sh",
+      "precondition": "API07 Owner A 的成品、半成品及原材料变体已存在"
+    },
+    {
+      "package_version": "v3",
+      "id": "HVR01-30",
+      "title": "SN 管理产品单条 quantity=3：拒绝并定位产品、托盘",
+      "payload": "test_data/archive/superseded_cc_gin_007_v3_20261123/payloads/hvr01_30.json",
+      "curl": "test_data/archive/superseded_cc_gin_007_v3_20261123/curl/hvr01_30.sh"
+    },
+    {
+      "package_version": "v3",
+      "id": "HVR01-31",
+      "title": "同一产品、同一真实 SN 跨托盘重复：拒绝",
+      "payload": "test_data/archive/superseded_cc_gin_007_v3_20261123/payloads/hvr01_31.json",
+      "curl": "test_data/archive/superseded_cc_gin_007_v3_20261123/curl/hvr01_31.sh"
+    },
+    {
+      "package_version": "v3",
+      "id": "HVR01-32",
+      "title": "不同产品使用相同 SN 文本：允许",
+      "payload": "test_data/archive/superseded_cc_gin_007_v3_20261123/payloads/hvr01_32.json",
+      "curl": "test_data/archive/superseded_cc_gin_007_v3_20261123/curl/hvr01_32.sh"
+    },
+    {
+      "package_version": "v3",
+      "id": "HVR01-33",
+      "title": "不同 API01 单据引用 HVR01-29 的真实 SN：允许",
+      "payload": "test_data/archive/superseded_cc_gin_007_v3_20261123/payloads/hvr01_33.json",
+      "curl": "test_data/archive/superseded_cc_gin_007_v3_20261123/curl/hvr01_33.sh",
+      "depends_on": [
+        "HVR01-29"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "CC5HVR-20261126-IN-01",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "CC-GIN-005 最终模拟主链：成品实际收货 2 件",
+  "details": [
+    {
+      "productCode": "CC5HVR-20261126-P001",
+      "productName": "CC-GIN-005 HVR 连续主链成品",
+      "specificationModel": "CC5HVR-20261126-MODEL-001",
+      "quantity": 2
+    }
+  ]
+}

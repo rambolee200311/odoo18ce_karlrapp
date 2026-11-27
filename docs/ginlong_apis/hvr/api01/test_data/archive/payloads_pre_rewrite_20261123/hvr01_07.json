@@ -1,0 +1,17 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR01-20261121-IN-ZERO",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "HVR01 本地人工验收",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 0
+    }
+  ],
+  "snList": []
+}

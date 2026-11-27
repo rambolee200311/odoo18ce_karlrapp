@@ -1,0 +1,11 @@
+{
+  "action": "Add",
+  "owner": "HVR07-20261119-OWNER-A",
+  "productCode": "HVR07-20261119-SEMI-A",
+  "productName": "HVR07 半成品产品",
+  "specificationModel": "HVR07-SEMI-MODEL",
+  "unit": "台",
+  "productForm": "半成品",
+  "power": "3kW",
+  "weight": 2.25
+}

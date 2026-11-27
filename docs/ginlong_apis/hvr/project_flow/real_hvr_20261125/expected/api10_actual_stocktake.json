@@ -1,0 +1,15 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR-CC5-REAL-20261125-CC0B80-COUNT-001",
+  "snList": [
+    {
+      "productSN": "HVR-CC5-REAL-20261125-CC0B80-SERIAL-002",
+      "quantity": 1,
+      "palletCode": "<仓库实盘结果实际托盘码>",
+      "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+      "operator": "<实盘结果实际操作人编码>",
+      "operationTime": "<实盘结果实际操作时间>"
+    }
+  ]
+}

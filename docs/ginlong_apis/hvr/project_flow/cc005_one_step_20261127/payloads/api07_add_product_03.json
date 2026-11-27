@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR005-20261127-R8239A3-RAW",
+  "productName": "R8239A3 HVR 原材料 C",
+  "specificationModel": "R8239A3-RAW-MODEL",
+  "unit": "台",
+  "productForm": "原材料",
+  "power": 0,
+  "nationalStandard": "HVR",
+  "certificationModel": "R8239A3-RAW",
+  "weight": 0.5,
+  "length": 80,
+  "width": 40,
+  "height": 30
+}

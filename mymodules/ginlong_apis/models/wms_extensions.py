@@ -261,7 +261,20 @@ class GinlongOutboundShipmentDetail(models.Model):
 
     @api.constrains("order_id", "move_line_id")
     def _check_move_line_order(self):
-        """确保发货明细引用的实际作业行属于同一出库 Order。"""
+        """确保发货明细只引用当前订单已完成的实际 Outgoing 作业行。
+
+        WorldDepot 通过 `outbound.order.picking_Out` 保存实际出库 Picking，
+        该关系不保证反向写入 `stock.picking.outbound_order_id`。兼容 WMS 中
+        已写入反向关联的 outgoing Picking，同时拒绝内部备货及尚未 Done 的 Picking。
+        """
         for record in self:
-            if record.move_line_id.picking_id.outbound_order_id != record.order_id:
-                raise ValidationError(_("发货明细必须关联当前出库单的实际作业行。"))
+            picking = record.move_line_id.picking_id
+            is_outgoing = picking.picking_type_id.code == "outgoing"
+            # 发货完成回传只能读取已经过账的实际结果，未完成 Picking 不能当作发货实绩。
+            is_done = picking.state == "done"
+            is_order_outbound = picking == record.order_id.picking_Out
+            is_linked_outgoing = (
+                picking.outbound_order_id == record.order_id
+            )
+            if not is_done or not is_outgoing or not (is_order_outbound or is_linked_outgoing):
+                raise ValidationError(_("发货明细必须关联当前订单已完成的实际出库作业行。"))

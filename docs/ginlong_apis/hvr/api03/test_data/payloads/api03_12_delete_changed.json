@@ -1,0 +1,8 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Del",
+  "outboundOrderNo": "HVR03-MANUAL-20261125-LIFE-01",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "API03 HVR 已取消订单的不同内容重复 Del"
+}

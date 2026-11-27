@@ -1,0 +1,142 @@
+{
+  "database": "odooce_karlrapp",
+  "module_version": "18.0.2.0.51",
+  "warehouse_delivery_setup": {
+    "warehouse": "KarlRapp-WH",
+    "delivery_steps": "ship_only",
+    "route": "KarlRapp-WH: Deliver in 1 step (ship)",
+    "route_rule": "KRWH/KRStock -> Partners/Customers",
+    "operation_type": "KarlRapp-WH: Delivery Orders",
+    "operation_code": "outgoing"
+  },
+  "api09_initial": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 01:02:01",
+    "owner": "HVR01-20261121-OWNER-A",
+    "warehouse": "KRWH",
+    "inventoryList": [
+      {
+        "productCode": "CC5HVR-20261126-P001",
+        "quantity": 1.0
+      },
+      {
+        "productCode": "HVR01-20261122-PROD-SERIAL",
+        "quantity": 4.0
+      }
+    ]
+  },
+  "api09_after_inbound": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 01:37:11",
+    "owner": "HVR01-20261121-OWNER-A",
+    "warehouse": "KRWH",
+    "inventoryList": [
+      {
+        "productCode": "CC5HVR-20261126-P001",
+        "quantity": 1.0
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-FG",
+        "quantity": 3.0
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-RAW",
+        "quantity": 12.0
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-SF",
+        "quantity": 3.0
+      },
+      {
+        "productCode": "HVR01-20261122-PROD-SERIAL",
+        "quantity": 4.0
+      }
+    ]
+  },
+  "api04_log_id": 9499,
+  "api04_http_result": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 09:34:36"
+  },
+  "inbound_order_id": 2751,
+  "inbound_picking": {
+    "id": 1937,
+    "name": "KRWH/KRIN/01180",
+    "state": "done",
+    "picking_type": "incoming"
+  },
+  "api03_order_id": 1403,
+  "outbound_order": {
+    "state": "confirm",
+    "status": "planning",
+    "pick_type": false,
+    "picking_PICK": false,
+    "picking_Out": false
+  },
+  "related_outbound_pickings": [],
+  "inventory_after_inbound": [
+    {
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "tracking": "serial",
+      "physicalQty": 3.0,
+      "reservedQty": 0.0,
+      "pallets": [
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+          "quantity": 1.0
+        },
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+          "quantity": 1.0
+        },
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+          "quantity": 1.0
+        }
+      ]
+    },
+    {
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "tracking": "serial",
+      "physicalQty": 3.0,
+      "reservedQty": 0.0,
+      "pallets": [
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-003",
+          "quantity": 1.0
+        },
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+          "quantity": 1.0
+        },
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+          "quantity": 1.0
+        }
+      ]
+    },
+    {
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "tracking": "none",
+      "physicalQty": 12.0,
+      "reservedQty": 0.0,
+      "pallets": [
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-003",
+          "quantity": 3.0
+        },
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+          "quantity": 4.0
+        },
+        {
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+          "quantity": 5.0
+        }
+      ]
+    }
+  ]
+}

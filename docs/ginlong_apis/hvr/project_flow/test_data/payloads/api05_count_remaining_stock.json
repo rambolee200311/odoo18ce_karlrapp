@@ -1,0 +1,25 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR-FLOW-20261125-COUNT-001",
+  "warehouse": "KRWH",
+  "remark": "项目级连续业务主链：盘点 API03 实际发货后仍在库的 SN-002",
+  "details": [
+    {
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001",
+      "quantity": 1
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR-FLOW-SN-002",
+      "quantity": 1,
+      "palletCode": "HVR-FLOW-PALLET-001",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001"
+    }
+  ]
+}

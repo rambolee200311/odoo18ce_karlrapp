@@ -1,5 +1,110 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- 专用 HVR/WMS 操作组显式授予订单界面权限，避免扩大到所有库存用户。 -->
+    <record id="group_ginlong_hvr_operator" model="res.groups">
+        <field name="name">Ginlong HVR/WMS Operator</field>
+        <field name="category_id" ref="base.module_category_inventory_inventory"/>
+        <field name="implied_ids" eval="[(4, ref('stock.group_stock_user')), (4, ref('project.group_project_user'))]"/>
+    </record>
+
+    <!-- 普通操作账号只可访问其联系人上配置的 source_project_id 对应订单及明细。 -->
+    <record id="rule_ginlong_operator_inbound_order" model="ir.rule">
+        <field name="name">Ginlong operator: inbound orders in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order"/>
+        <field name="domain_force">[('project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_inbound_product" model="ir.rule">
+        <field name="name">Ginlong operator: inbound products in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order_product"/>
+        <field name="domain_force">[('project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_inbound_pallet" model="ir.rule">
+        <field name="name">Ginlong operator: inbound pallets in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order_products_pallet"/>
+        <field name="domain_force">[('project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_inbound_serial" model="ir.rule">
+        <field name="name">Ginlong operator: inbound serials in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order_product_serial_number"/>
+        <field name="domain_force">[('inbound_order_product_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_inbound_details" model="ir.rule">
+        <field name="name">Ginlong operator: inbound details in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order_product_details"/>
+        <field name="domain_force">[('inbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_inbound_docs" model="ir.rule">
+        <field name="name">Ginlong operator: inbound documents in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order_docs"/>
+        <field name="domain_force">[('inbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_inbound_charge" model="ir.rule">
+        <field name="name">Ginlong operator: inbound charges in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_inbound_order_charge"/>
+        <field name="domain_force">[('inbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_order" model="ir.rule">
+        <field name="name">Ginlong operator: outbound orders in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order"/>
+        <field name="domain_force">[('project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_product" model="ir.rule">
+        <field name="name">Ginlong operator: outbound products in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order_product"/>
+        <field name="domain_force">[('project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_serial" model="ir.rule">
+        <field name="name">Ginlong operator: outbound serials in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order_product_serial_number"/>
+        <field name="domain_force">[('project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_pack" model="ir.rule">
+        <field name="name">Ginlong operator: outbound packing in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order_pack_info"/>
+        <field name="domain_force">[('outbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_pack_product" model="ir.rule">
+        <field name="name">Ginlong operator: outbound pack products in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order_pack_product"/>
+        <field name="domain_force">[('pack_info_id.outbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_docs" model="ir.rule">
+        <field name="name">Ginlong operator: outbound documents in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order_docs"/>
+        <field name="domain_force">[('outbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_outbound_charge" model="ir.rule">
+        <field name="name">Ginlong operator: outbound charges in assigned project</field>
+        <field name="model_id" ref="worlddepot.model_world_depot_outbound_order_charge"/>
+        <field name="domain_force">[('outbound_order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_receipt_details" model="ir.rule">
+        <field name="name">Ginlong operator: receipt details in assigned project</field>
+        <field name="model_id" ref="model_ginlong_inbound_receipt_detail"/>
+        <field name="domain_force">[('order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+    <record id="rule_ginlong_operator_shipment_details" model="ir.rule">
+        <field name="name">Ginlong operator: shipment details in assigned project</field>
+        <field name="model_id" ref="model_ginlong_outbound_shipment_detail"/>
+        <field name="domain_force">[('order_id.project', '=', user.source_project_id.id)]</field>
+        <field name="groups" eval="[(4, ref('group_ginlong_hvr_operator'))]"/>
+    </record>
+
     <!-- 共享日志模型以 API objectid 标记后，仅允许 Administrator 读取 Ginlong API01–10 记录。 -->
     <record id="rule_ginlong_api_log_admin_only" model="ir.rule">
         <field name="name">Ginlong Administrator: Ginlong API01-10 logs only</field>

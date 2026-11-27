@@ -1,0 +1,26 @@
+{
+  "owner": "HVR01-20261121-OWNER-B",
+  "action": "Add",
+  "inboundOrderNo": "HVR01-20261121-IN-OWNER-B",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "HVR01 本地人工验收",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 3
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR01-20261121-IN-OWNER-B-SN-001",
+      "quantity": 1,
+      "palletCode": "HVR01-20261121-IN-OWNER-B-PALLET-01",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "request": {
+    "owner": "HVR01-20261121-OWNER-A",
+    "warehouse": "KRWH"
+  },
+  "http_status": 200,
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 02:50:37",
+    "owner": "HVR01-20261121-OWNER-A",
+    "warehouse": "KRWH",
+    "inventoryList": [
+      {
+        "productCode": "CC5HVR-20261126-P001",
+        "quantity": 1.0
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-FG",
+        "quantity": 2.0
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-RAW",
+        "quantity": 9.0
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-SF",
+        "quantity": 2.0
+      },
+      {
+        "productCode": "HVR01-20261122-PROD-SERIAL",
+        "quantity": 4.0
+      }
+    ]
+  }
+}

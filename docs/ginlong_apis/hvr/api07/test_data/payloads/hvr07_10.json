@@ -1,0 +1,10 @@
+{
+  "action": "Add",
+  "owner": "HVR07-20261119-OWNER-A",
+  "productCode": "HVR07-20261119-RETRY",
+  "productName": "HVR07 单位修正重试产品",
+  "specificationModel": "HVR07-RETRY-MODEL",
+  "unit": "HVR07-NO-SUCH-UOM",
+  "productForm": "原材料",
+  "weight": 1.5
+}

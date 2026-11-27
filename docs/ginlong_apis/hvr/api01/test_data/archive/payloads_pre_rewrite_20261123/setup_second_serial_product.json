@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR01-20261122-PROD-SEMIFINISHED",
+  "productName": "HVR01 半成品序列号验收产品",
+  "specificationModel": "HVR01-SEMIFINISHED-MODEL",
+  "unit": "台",
+  "productForm": "半成品",
+  "power": "5kW",
+  "nationalStandard": "HVR01-SEMIFINISHED-STD",
+  "certificationModel": "HVR01-SEMIFINISHED-CERT",
+  "weight": 0,
+  "length": 0,
+  "width": 0,
+  "height": 0
+}

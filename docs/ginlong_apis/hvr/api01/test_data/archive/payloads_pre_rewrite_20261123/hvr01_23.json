@@ -1,0 +1,26 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR01-20261122-SN-SHORT",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "HVR01 SN consistency",
+  "details": [
+    {
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL",
+      "quantity": 2
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR01-SN-SHORT-01",
+      "quantity": 1,
+      "palletCode": "HVR01-SN-PALLET",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    }
+  ]
+}

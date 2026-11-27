@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR005-20261127-R8239A3-FG",
+  "productName": "R8239A3 HVR 成品 A",
+  "specificationModel": "R8239A3-FG-MODEL",
+  "unit": "台",
+  "productForm": "成品",
+  "power": 5,
+  "nationalStandard": "HVR",
+  "certificationModel": "R8239A3-FG",
+  "weight": 1.25,
+  "length": 100,
+  "width": 50,
+  "height": 40
+}

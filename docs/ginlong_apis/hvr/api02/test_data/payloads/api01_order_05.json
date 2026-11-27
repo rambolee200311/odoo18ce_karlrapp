@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR-API02-20261124-03",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "API02 HVR：API01 创建订单，不建立收货确认明细",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 1
+    }
+  ]
+}

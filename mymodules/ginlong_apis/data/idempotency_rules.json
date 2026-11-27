@@ -18,7 +18,7 @@
       "event": "receipt_confirmation",
       "key_paths": ["source.model", "source.id", "source.business_key"],
       "action_path": "payload.action",
-      "version_paths": ["source.write_date"],
+      "unordered_array_paths": [],
       "strategy": "once"
     },
     "API03": {
@@ -28,7 +28,9 @@
       "action_path": "action",
       "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "del": "del", "delete": "del"},
       "default_strategy": "once",
-      "actions": {"add": "once", "edit": "repeatable", "del": "once"}
+      "actions": {"add": "once", "edit": "repeatable", "del": "once"},
+      "duplicate_action_errors": {"add": "IDM02"},
+      "duplicate_by_history": true
     },
     "API04": {
       "direction": "outbound",
@@ -36,7 +38,7 @@
       "event": "inbound_completion",
       "key_paths": ["source.model", "source.id", "source.business_key"],
       "action_path": "payload.action",
-      "version_paths": ["source.write_date"],
+      "unordered_array_paths": ["snList"],
       "strategy": "once"
     },
     "API05": {
@@ -46,7 +48,9 @@
       "action_path": "action",
       "action_aliases": {"add": "add", "create": "add", "edit": "edit", "update": "edit", "del": "del", "delete": "del"},
       "default_strategy": "once",
-      "actions": {"add": "once", "edit": "repeatable", "del": "once"}
+      "actions": {"add": "once", "edit": "repeatable", "del": "once"},
+      "duplicate_action_errors": {"add": "IDM02"},
+      "duplicate_by_history": true
     },
     "API06": {
       "direction": "outbound",
@@ -54,7 +58,7 @@
       "event": "picking_completed",
       "key_paths": ["source.model", "source.id", "source.business_key"],
       "action_path": "payload.action",
-      "version_paths": ["source.write_date"],
+      "unordered_array_paths": ["snList"],
       "strategy": "once"
     },
     "API07": {
@@ -72,7 +76,7 @@
       "event": "shipment_completed",
       "key_paths": ["source.model", "source.id", "source.business_key"],
       "action_path": "payload.action",
-      "version_paths": ["source.write_date"],
+      "unordered_array_paths": [],
       "strategy": "once"
     },
     "API09": {

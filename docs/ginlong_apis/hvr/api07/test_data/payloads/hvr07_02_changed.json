@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR07-20261119-OWNER-A",
+  "productCode": "HVR07-20261119-RAW-A",
+  "productName": "HVR07 重复新增变更报文，不应覆盖原档案",
+  "specificationModel": "HVR07-RAW-MODEL",
+  "unit": "台",
+  "productForm": "原材料",
+  "power": "5kW",
+  "nationalStandard": "HVR07-STD",
+  "certificationModel": "HVR07-CERT",
+  "weight": 999,
+  "length": 0,
+  "width": 0,
+  "height": 0
+}

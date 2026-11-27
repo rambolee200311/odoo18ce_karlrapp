@@ -1,0 +1,77 @@
+{
+  "owner": "HVR-GIN005-OWNER",
+  "action": "Add",
+  "countOrderNo": "HVR-REAL-20261128-COUNT-01",
+  "warehouse": "KRWH",
+  "remark": "CC-GIN-005 真实人工 HVR：核对出库后实际剩余库存",
+  "details": [
+    {
+      "productCode": "HVR-REAL-20261128-FG",
+      "productName": "HVR 真实人工验收成品",
+      "specificationModel": "HVR-REAL-FG-MODEL",
+      "quantity": 2
+    },
+    {
+      "productCode": "HVR-REAL-20261128-SF",
+      "productName": "HVR 真实人工验收半成品",
+      "specificationModel": "HVR-REAL-SF-MODEL",
+      "quantity": 2
+    },
+    {
+      "productCode": "HVR-REAL-20261128-RAW",
+      "productName": "HVR 真实人工验收原材料",
+      "specificationModel": "HVR-REAL-RAW-MODEL",
+      "quantity": 8
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR28-FG-SN-002",
+      "quantity": 1,
+      "palletCode": "HVR28-PALLET-001",
+      "productCode": "HVR-REAL-20261128-FG",
+      "productName": "HVR 真实人工验收成品",
+      "specificationModel": "HVR-REAL-FG-MODEL"
+    },
+    {
+      "productSN": "HVR28-FG-SN-004",
+      "quantity": 1,
+      "palletCode": "HVR28-PALLET-003",
+      "productCode": "HVR-REAL-20261128-FG",
+      "productName": "HVR 真实人工验收成品",
+      "specificationModel": "HVR-REAL-FG-MODEL"
+    },
+    {
+      "productSN": "HVR28-SF-SN-001",
+      "quantity": 1,
+      "palletCode": "HVR28-PALLET-001",
+      "productCode": "HVR-REAL-20261128-SF",
+      "productName": "HVR 真实人工验收半成品",
+      "specificationModel": "HVR-REAL-SF-MODEL"
+    },
+    {
+      "productSN": "HVR28-SF-SN-002",
+      "quantity": 1,
+      "palletCode": "HVR28-PALLET-003",
+      "productCode": "HVR-REAL-20261128-SF",
+      "productName": "HVR 真实人工验收半成品",
+      "specificationModel": "HVR-REAL-SF-MODEL"
+    },
+    {
+      "productSN": "HVR-REAL-20261128-RAW",
+      "quantity": 5,
+      "palletCode": "HVR28-PALLET-001",
+      "productCode": "HVR-REAL-20261128-RAW",
+      "productName": "HVR 真实人工验收原材料",
+      "specificationModel": "HVR-REAL-RAW-MODEL"
+    },
+    {
+      "productSN": "HVR-REAL-20261128-RAW",
+      "quantity": 3,
+      "palletCode": "HVR28-PALLET-003",
+      "productCode": "HVR-REAL-20261128-RAW",
+      "productName": "HVR 真实人工验收原材料",
+      "specificationModel": "HVR-REAL-RAW-MODEL"
+    }
+  ]
+}

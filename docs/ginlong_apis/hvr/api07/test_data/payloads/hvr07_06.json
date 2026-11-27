@@ -1,0 +1,11 @@
+{
+  "action": "Add",
+  "owner": "HVR07-20261119-OWNER-A",
+  "productCode": "HVR07-20261119-FIN-A",
+  "productName": "HVR07 成品产品",
+  "specificationModel": "HVR07-FIN-MODEL",
+  "unit": "台",
+  "productForm": "成品",
+  "power": "5kW",
+  "weight": 5.75
+}

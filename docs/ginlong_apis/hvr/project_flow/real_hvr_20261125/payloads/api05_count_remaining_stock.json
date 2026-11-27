@@ -1,0 +1,25 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR-CC5-REAL-20261125-CC0B80-COUNT-001",
+  "warehouse": "KRWH",
+  "remark": "CC-GIN-005 独立真实 HVR 出库后实盘范围",
+  "details": [
+    {
+      "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+      "productName": "CC-GIN-005 独立真实 HVR 成品",
+      "specificationModel": "HVR-CC5-REAL-SN-MODEL-001",
+      "quantity": 1
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR-CC5-REAL-20261125-CC0B80-SERIAL-002",
+      "quantity": 1,
+      "palletCode": "HVR-CC5-REAL-20261125-CC0B80-PALLET-001",
+      "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+      "productName": "CC-GIN-005 独立真实 HVR 成品",
+      "specificationModel": "HVR-CC5-REAL-SN-MODEL-001"
+    }
+  ]
+}

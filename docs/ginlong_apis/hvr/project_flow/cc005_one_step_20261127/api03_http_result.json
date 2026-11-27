@@ -1,0 +1,79 @@
+{
+  "httpStatus": 200,
+  "request": {
+    "owner": "HVR01-20261121-OWNER-A",
+    "action": "Add",
+    "outboundOrderNo": "HVR005-20261127-R8239A3-OUT-001",
+    "warehouse": "KRWH",
+    "businessType": "STANDARD",
+    "remark": "CC-GIN-005 一步出库整托+拆托模拟主链 R8239A3",
+    "customer": "HVR01-20261121 测试货主 A",
+    "details": [
+      {
+        "productCode": "HVR005-20261127-R8239A3-FG",
+        "productName": "R8239A3 HVR 成品 A",
+        "specificationModel": "R8239A3-FG-MODEL",
+        "quantity": 1,
+        "net_wt_machine": 1.25,
+        "net_wt_total": 1.25,
+        "pack_qty": 1,
+        "pallet_qty": 1,
+        "pallet_len": 1200,
+        "pallet_wid": 1000,
+        "pallet_hgt": 1000,
+        "unit_vol": 0.1,
+        "pack_unit": "台",
+        "pack_wt": 0,
+        "pallet_total_wt": 20,
+        "total_vol": 0.1,
+        "carton_wt_total": 1.25,
+        "gross_wt_total": 21.25
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-SF",
+        "productName": "R8239A3 HVR 半成品 B",
+        "specificationModel": "R8239A3-SF-MODEL",
+        "quantity": 1,
+        "net_wt_machine": 2.5,
+        "net_wt_total": 2.5,
+        "pack_qty": 1,
+        "pallet_qty": 1,
+        "pallet_len": 1200,
+        "pallet_wid": 1000,
+        "pallet_hgt": 1000,
+        "unit_vol": 0.1,
+        "pack_unit": "台",
+        "pack_wt": 0,
+        "pallet_total_wt": 20,
+        "total_vol": 0.1,
+        "carton_wt_total": 2.5,
+        "gross_wt_total": 22.5
+      },
+      {
+        "productCode": "HVR005-20261127-R8239A3-RAW",
+        "productName": "R8239A3 HVR 原材料 C",
+        "specificationModel": "R8239A3-RAW-MODEL",
+        "quantity": 3,
+        "net_wt_machine": 0.5,
+        "net_wt_total": 1.5,
+        "pack_qty": 3,
+        "pallet_qty": 1,
+        "pallet_len": 1200,
+        "pallet_wid": 1000,
+        "pallet_hgt": 1000,
+        "unit_vol": 0.1,
+        "pack_unit": "台",
+        "pack_wt": 0,
+        "pallet_total_wt": 20,
+        "total_vol": 0.3,
+        "carton_wt_total": 1.5,
+        "gross_wt_total": 21.5
+      }
+    ]
+  },
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 01:38:41"
+  }
+}

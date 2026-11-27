@@ -1,0 +1,26 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR01-20261122-R1-IN-001",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "API01 HVR R1 首次 Add",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 3
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR01-20261122-R1-BASE-SN-001",
+      "quantity": 3,
+      "palletCode": "HVR01-20261121-IN-001-PALLET-01",
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01"
+    }
+  ]
+}

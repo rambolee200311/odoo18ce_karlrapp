@@ -1,0 +1,31 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "outboundOrderNo": "CC5HVR-20261126-OUT-01",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "CC-GIN-005 最终模拟主链：同货主产品实际备货 1 件",
+  "customer": "Ginlong Technologies Co., Ltd",
+  "details": [
+    {
+      "productCode": "CC5HVR-20261126-P001",
+      "productName": "CC-GIN-005 HVR 连续主链成品",
+      "specificationModel": "CC5HVR-20261126-MODEL-001",
+      "quantity": 1,
+      "net_wt_machine": 1.25,
+      "net_wt_total": 1.25,
+      "pack_qty": 1,
+      "pallet_qty": 1,
+      "pallet_len": 1000,
+      "pallet_wid": 800,
+      "pallet_hgt": 900,
+      "unit_vol": 0.72,
+      "pack_unit": "台",
+      "pack_wt": 0,
+      "pallet_total_wt": 1.25,
+      "total_vol": 0.72,
+      "carton_wt_total": 1.25,
+      "gross_wt_total": 1.25
+    }
+  ]
+}

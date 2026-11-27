@@ -1,0 +1,140 @@
+{
+  "run": "R8239A3",
+  "owner": "HVR01-20261121-OWNER-A",
+  "warehouse": "KRWH",
+  "project": "HVR01-20261121 API01 HVR Project",
+  "inboundOrderNo": "HVR005-20261127-R8239A3-IN-001",
+  "outboundOrderNo": "HVR005-20261127-R8239A3-OUT-001",
+  "countOrderNo": "HVR005-20261127-R8239A3-COUNT-001",
+  "productCodes": [
+    "HVR005-20261127-R8239A3-FG",
+    "HVR005-20261127-R8239A3-SF",
+    "HVR005-20261127-R8239A3-RAW"
+  ],
+  "pallets": [
+    "HVR005-20261127-R8239A3-PALLET-001",
+    "HVR005-20261127-R8239A3-PALLET-002",
+    "HVR005-20261127-R8239A3-PALLET-003"
+  ],
+  "quantities": {
+    "FG": 3,
+    "SF": 3,
+    "RAW": 12
+  },
+  "outbound": {
+    "full_pallet": "HVR005-20261127-R8239A3-PALLET-003",
+    "split_pallet": "HVR005-20261127-R8239A3-PALLET-001",
+    "selection": {
+      "FG": 1,
+      "SF": 1,
+      "RAW": 3
+    }
+  },
+  "target_remaining_after_outbound": {
+    "FG": 2,
+    "SF": 2,
+    "RAW": 9
+  },
+  "execution_status": "PARTIAL",
+  "stop_reason": "API01-07、API09、API10 已在同一主链通过模拟 HVR；API08 当前订单状态仍为 planning，缺少已确认的实际离仓状态入口，且现有按钮依赖空发货明细。",
+  "actual_inventory_at_stop": {
+    "FG": 2,
+    "SF": 2,
+    "RAW": 9
+  },
+  "previous_blocked_stop_reason": "KRWH has the one-step ship route and Delivery Orders operation type, but the API03 outbound order Picking Type selector only exposes Internal Transfers and standard Delivery Orders cannot be linked to the order in the UI. No outbound Picking was created.",
+  "outbound_picking": {
+    "id": 1938,
+    "name": "KRWH/KROUT/00749",
+    "order_id": 1403,
+    "state": "done",
+    "operation_type": "KarlRapp-WH: Delivery Orders",
+    "deleted": false,
+    "note": "已过账实际库存，复用于 API06；不删除或冲销。"
+  },
+  "api06_result": {
+    "status": "PASS",
+    "mock_url_path": "/API/WMS_JSON/TPL_Picking_Completed",
+    "http_method": "POST",
+    "mock_http_status": 200,
+    "mock_response": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK"
+    },
+    "api_log_id": 9535,
+    "previous_success_log_id": 9508,
+    "previous_blocked_log_id": 9504,
+    "idempotency_record_id": 8006,
+    "send_count_for_latest_confirmed_retry": 1,
+    "palletQty": "2",
+    "totalWeight": "5.25",
+    "inventory_before_and_after": {
+      "FG": 2,
+      "SF": 2,
+      "RAW": 9
+    },
+    "evidence": [
+      "evidence/api06_success_order_button_20261127.png",
+      "../test_data/outbound_received.jsonl",
+      "evidence/api04_api06_api10_nonserial_orm_evidence_20261127.json"
+    ]
+  },
+  "api04_result": {
+    "status": "PASS",
+    "historical_invalid_log_id": 9499,
+    "latest_api_log_id": 9533,
+    "idempotency_record_id": 8004,
+    "mock_http_status": 200,
+    "mock_response": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK"
+    },
+    "non_serial_product_sn_rule": "productSN = productCode",
+    "raw_quantities_by_pallet": {
+      "PALLET-001": 5,
+      "PALLET-002": 4,
+      "PALLET-003": 3
+    }
+  },
+  "api09_after_outbound": {
+    "status": "PASS",
+    "api_log_id": 9509,
+    "inventory": {
+      "FG": 2,
+      "SF": 2,
+      "RAW": 9
+    }
+  },
+  "api05_result": {
+    "status": "PASS",
+    "api_log_id": 9511,
+    "count_order_id": 953
+  },
+  "api10_result": {
+    "status": "PASS",
+    "api_log_id": 9534,
+    "mock_http_status": 200,
+    "mock_response": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK"
+    },
+    "non_serial_product_sn_rule": "productSN = productCode",
+    "raw_results": [
+      {"pallet": "PALLET-001", "quantity": 5},
+      {"pallet": "PALLET-002", "quantity": 4}
+    ]
+  },
+  "api08_result": {
+    "status": "BLOCKED",
+    "outbound_order_status": "planning",
+    "actual_outbound_datetime": null,
+    "shipment_detail_rows": 0,
+    "reason": "当前 API08 生成依赖重复维护的 Ginlong 发货明细；订单缺少已确认的一步离仓状态操作。",
+    "evidence": "evidence/api08_current_business_state_20261127.png"
+  },
+  "actual_inventory_after_outbound": {
+    "FG": 2,
+    "SF": 2,
+    "RAW": 9
+  }
+}

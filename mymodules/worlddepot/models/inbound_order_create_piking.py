@@ -11,7 +11,7 @@ class InboundOrder(models.Model):
     _inherit = 'world.depot.inbound.order'    
     
     def action_create_stock_picking(self):
-        """Create the related stock picking with packages and move lines."""
+        """按入库订单创建 Picking、托盘及 move line。"""
         for record in self:
             # Ensure the order is confirmed
             if record.state != 'confirm':
@@ -20,8 +20,6 @@ class InboundOrder(models.Model):
                 raise UserError(_("Reference must be set before creating a stock picking."))
             if not record.pick_type:
                 raise UserError(_("Picking Type is required to create a stock picking."))
-            if not record.cntr_no:
-                raise UserError(_("Container No is required to create packages."))
 
             # Check if stock picking already exists
             existing_picking = self.env['stock.picking'].search(
@@ -47,6 +45,8 @@ class InboundOrder(models.Model):
             })
             
             pallet_index = 1
+            # 柜号属于可选资料；没有柜号时由订单编号保持包装标识可追溯。
+            container_segment = f"-{record.cntr_no}" if record.cntr_no else ""
             product_move_map = {}
             pallet_data_list = []
             
@@ -96,7 +96,7 @@ class InboundOrder(models.Model):
                 # Create packages for each physical pallet
                 for pallet_number in range(1, int(product.pallets) + 1):
                     # Create one package per physical pallet
-                    package_name = f"{record.reference}-{record.cntr_no}-{str(pallet_index).zfill(4)}"
+                    package_name = f"{record.reference}{container_segment}-{str(pallet_index).zfill(4)}"
                     package = self.env['stock.quant.package'].search([('name', '=', package_name)])
                     if not package:
                         package = self.env['stock.quant.package'].create({
@@ -111,7 +111,9 @@ class InboundOrder(models.Model):
                         # Create lot if product is lot tracked
                         lot = False
                         if pallet.product_id.tracking == 'lot':
-                            lot_name = f"{record.a_date.strftime('%Y%m')}-{record.cntr_no}-{str(pallet_index).zfill(4)}"
+                            # 缺少柜号时用订单编号替代该命名段，避免空值导致批次无法追溯。
+                            lot_reference = record.cntr_no or record.reference
+                            lot_name = f"{record.a_date.strftime('%Y%m')}-{lot_reference}-{str(pallet_index).zfill(4)}"
                             lot = self.env['stock.lot'].search(
                                 [('name', '=', lot_name),
                                 ('product_id', '=', pallet.product_id.id)], limit=1)
@@ -169,7 +171,7 @@ class InboundOrder(models.Model):
         }    
         
     def action_create_stock_picking_old2(self):
-        """Create the related stock picking with packages and move lines."""
+        """兼容旧流程，按订单数据创建 Picking、托盘及 move line。"""
         for record in self:
             # Ensure the order is confirmed
             if record.state != 'confirm':
@@ -178,8 +180,6 @@ class InboundOrder(models.Model):
                 raise UserError(_("Reference must be set before creating a stock picking."))
             if not record.pick_type:
                 raise UserError(_("Picking Type is required to create a stock picking."))
-            if not record.cntr_no:
-                raise UserError(_("Container No is required to create packages."))
 
             # Check if stock picking already exists
             existing_picking = self.env['stock.picking'].search(
@@ -204,6 +204,8 @@ class InboundOrder(models.Model):
                 'planning_date': record.a_date,
             })
             pallet_index = 1
+            # 柜号可缺省；无柜号时仍以订单号和托盘序号生成稳定标识。
+            container_segment = f"-{record.cntr_no}" if record.cntr_no else ""
 
             # Group same products together to merge quantities
             product_pallet_map = {}
@@ -252,7 +254,7 @@ class InboundOrder(models.Model):
                     pallet_quantity = pallet_data['quantity']
                     
                     # Create package
-                    package_name = f"{record.reference}-{record.cntr_no}-{str(pallet_index).zfill(4)}"
+                    package_name = f"{record.reference}{container_segment}-{str(pallet_index).zfill(4)}"
                     package = self.env['stock.quant.package'].search([('name', '=', package_name)])
                     if not package:
                         package = self.env['stock.quant.package'].create({
@@ -263,7 +265,9 @@ class InboundOrder(models.Model):
                     # Create lot if product is lot tracked
                     lot = False
                     if pallet.product_id.tracking == 'lot':
-                        lot_name = f"{record.a_date.strftime('%Y%m')}-{record.cntr_no}-{str(pallet_index).zfill(4)}"
+                        # 缺少柜号时用订单编号替代该命名段，避免空值导致批次无法追溯。
+                        lot_reference = record.cntr_no or record.reference
+                        lot_name = f"{record.a_date.strftime('%Y%m')}-{lot_reference}-{str(pallet_index).zfill(4)}"
                         lot = self.env['stock.lot'].search(
                             [('name', '=', lot_name),
                              ('product_id', '=', pallet.product_id.id)], limit=1)

@@ -74,3 +74,16 @@ Scope: N/A/Deferred 与模板同步 BLOCKED 仍按原状态记录，不视为 PA
 | 版本 | 日期 | 状态 | 说明 |
 |---|---|---|---|
 | v0.1 | 2026-11-24 | Closed | 记录 CC-GIN-008 适用验收、Human Review APPROVED、N/A/Deferred 决定、部署预检、升级留存及 8099 模块版本证据 |
+
+## 7. 关闭后 Human Review 补充验收（2026-11-24）
+
+项目负责人补充明确：API01/03/05 的 Del 必须基于当前有效订单；只有取消历史时返回业务错误，不能重放先前成功响应。该规则作为 CC-GIN-008 收尾补充完成了设计追踪、代码和自动化验证。原 v0.1 关闭记录及此前“重复 Del 成功重放”的历史证据保留；本节记录该决定批准后的当前实现和验收，不改写原关闭时点。
+
+| 验收项 | 证据 | 结果 |
+|---|---|---|
+| API01/03/05 首次 Del、取消后重复 Del、重新 Add 后 Del 的真实 HTTP/ORM 自动化 | `/private/tmp/ccgin008_del_validity_20261124_r3.log`：Ginlong 74 post-tests、0 failed、0 error(s)，14,126 queries；含相同/不同 Payload、取消历史、幂等记录及 Edit 有效性断言 | SATISFIED |
+| 8099 当前模块加载 | 本地 ORM：`ginlong_apis installed / 18.0.2.0.43`；最终重启 PID 65649 Registry loaded；`/web/login` HTTP 200 | SATISFIED |
+| 人工 HVR、真实 Ginlong/KR 联调 | 本补充没有执行；沿用 CC-008 Human Review 决定，人工 HVR 为 N/A（本 CC）/Deferred（最终集成），外部联调仍在其对应 CC | 未记为 PASS |
+| 模板同步 | 模板来源缺失 | BLOCKED；沿用已批准流程例外 |
+
+模块版本 `18.0.2.0.43` 是原 v0.1 关闭后针对 Human Review 补充规则的本地开发更新；这项补充不改变原关闭决定、项目权限边界、历史留存或本 CC 对人工 HVR 的豁免。

@@ -2,5 +2,6 @@
 
 from . import api_control
 from . import ginlong_callbacks
+from . import callback_confirmation
 from . import api_log
 from . import wms_extensions

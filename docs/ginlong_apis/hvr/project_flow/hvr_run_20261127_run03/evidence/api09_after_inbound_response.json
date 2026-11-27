@@ -1,0 +1,24 @@
+{
+  "httpStatus": 200,
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 06:44:03",
+    "owner": "HVR-GIN005-OWNER",
+    "warehouse": "KRWH",
+    "inventoryList": [
+      {
+        "productCode": "HVR005-20261127-RUN03-FG",
+        "quantity": 3.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-RAW",
+        "quantity": 12.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-SF",
+        "quantity": 3.0
+      }
+    ]
+  }
+}

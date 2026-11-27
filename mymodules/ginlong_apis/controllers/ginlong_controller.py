@@ -22,14 +22,33 @@ from ..validators.payload_validator import validate_payload
 _logger = logging.getLogger(__name__)
 
 
-def _protocol_error_response(error, status=200, retry_after=None):
+def _http_status_for_error(error):
+    """按批准的 Ginlong 入站错误分类选择 HTTP 状态码。
+
+    参数：
+        error: 已映射到统一错误目录的 Ginlong 错误。
+
+    返回：
+        业务/字段/幂等错误为 200，认证/限流/系统错误按统一状态映射返回。
+    """
+    error_code = getattr(error, "error_code", None)
+    return {
+        "AUTH01": 401,
+        "AUTH02": 403,
+        "RATE01": 429,
+        "RATE02": 500,
+        "SYS01": 500,
+    }.get(error_code, 200)
+
+
+def _protocol_error_response(error, status=None, retry_after=None):
     """生成仅含 Ginlong 错误协议字段的响应，并登记内部错误信息。"""
     request.ginlong_api_error_log = error.to_log_values()
     response = GinlongSimulationController._json_response({
         "returnStatus": "N",
         "exceptionInfo": error.exception_info,
         "operationTime": fields.Datetime.to_string(fields.Datetime.now()),
-    }, status=status)
+    }, status=_http_status_for_error(error) if status is None else status)
     if retry_after:
         response.headers["Retry-After"] = retry_after
     return response
@@ -78,8 +97,7 @@ def ginlong_error_response(api_code, strict_success=False):
             except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
                 raise
             except GinlongAPIError as error:
-                status = 503 if error.error_code == "RATE02" else 200
-                return _protocol_error_response(error, status=status)
+                return _protocol_error_response(error)
             except UserError as error:
                 # 装饰器或认证前置流程抛出的业务异常也走同一错误目录，不误报为系统故障。
                 configured_error = _configured_error_for_exception(error)
@@ -87,12 +105,11 @@ def ginlong_error_response(api_code, strict_success=False):
                     "Ginlong %s request rejected by business rule (%s)",
                     api_code, configured_error.error_code,
                 )
-                return _protocol_error_response(configured_error, status=200)
+                return _protocol_error_response(configured_error)
             except Exception as error:
                 _logger.exception("Ginlong %s request failed", api_code)
                 return _protocol_error_response(
                     make_error("SYS01", details="%s: %s" % (type(error).__name__, error)),
-                    status=500,
                 )
 
             status = getattr(response, "status_code", 200)
@@ -120,7 +137,7 @@ def ginlong_error_response(api_code, strict_success=False):
                 error_code = logged.get("code") if isinstance(logged, dict) else None
                 if not error_code:
                     if status in (401, 403):
-                        error_code = "AUTH01"
+                        error_code = "AUTH02" if status == 403 else "AUTH01"
                     elif status == 429:
                         error_code = "RATE01"
                     elif status >= 500:
@@ -131,7 +148,7 @@ def ginlong_error_response(api_code, strict_success=False):
                         error_code = "BUS01"
                     detail = internal_body.get("error") or internal_body.get("exceptionInfo") or "HTTP %s" % status
                     return _protocol_error_response(
-                        make_error(error_code, details=detail), status=status, retry_after=retry_after,
+                        make_error(error_code, details=detail), retry_after=retry_after,
                     )
 
                 operation_time = internal_body.get("operationTime") or fields.Datetime.to_string(fields.Datetime.now())
@@ -191,16 +208,16 @@ class GinlongSimulationController(http.Controller):
 
     @staticmethod
     def _success_body(api_code, result):
-        """构造并验证符合 Ginlong V3.2 的成功响应。
+        """构造用于本地业务/幂等处理的成功对象并补齐 Ginlong 协议字段。
 
         参数：
             api_code: Ginlong API 编号。
             result: 业务服务返回结果。
 
         返回：
-            API07 仅包含协议字段；其他接口保留现有本地结果字段并补齐协议字段。
+            API07 直接使用协议三字段；其他写接口保留幂等器所需内部结果，由 HTTP 外层按 API 契约裁剪。
         """
-        # API07 只回传 V3.2 定义的响应字段；产品 ID 和内部处理结果不进入对外报文。
+        # API07 的持久化幂等只依赖服务结果；其 HTTP 响应不暴露产品 ID 或内部处理结果。
         body = {} if api_code == "API07" else dict(result)
         body.update({
             "returnStatus": "Y",
@@ -222,20 +239,22 @@ class GinlongSimulationController(http.Controller):
             "operationTime": fields.Datetime.to_string(fields.Datetime.now()),
         }
 
-    def _dispatch(self, api_code, handler, error_status=200):
+    def _dispatch(self, api_code, handler):
         """解析并分派一个有幂等保护的 Ginlong 入站请求。
 
         参数：
             api_code: Ginlong API 编号。
             handler: 对应的 ORM 业务处理函数。
-            error_status: 业务错误映射的 HTTP 状态码。
-
         返回：
             表示业务结果或错误的 JSON HTTP Response。
         """
         # 清空本次请求的内部错误日志元数据，避免后续装饰器误用旧诊断信息。
         request.ginlong_api_error_log = None
         try:
+            # API User 是所有 Ginlong 入站接口共有的访问前置条件，失败优先于报文校验。
+            api_user = getattr(request, "api_user", False)
+            if not api_user:
+                raise make_error("AUTH02", details="Authenticated Odoo user has no active API User")
             payload = json.loads(request.httprequest.data or b"{}")
             if not isinstance(payload, dict):
                 raise ValueError("Request body must be a JSON object")
@@ -256,9 +275,6 @@ class GinlongSimulationController(http.Controller):
             payload = services.normalize_inbound_action(
                 api_code, payload, strict=request_path.startswith("/api/ginlong/"),
             )
-            api_user = getattr(request, "api_user", False)
-            if not api_user:
-                raise make_error("AUTH01", details="Authenticated API user is not configured")
             def resolve_lifecycle(lifecycle_env):
                 """在给定 ORM Environment 中解析当前有效业务生命周期。"""
                 lifecycle_user = lifecycle_env["world.depot.api.user"].sudo().browse(api_user.id)
@@ -291,16 +307,16 @@ class GinlongSimulationController(http.Controller):
             # 并发序列化或死锁异常交回 Odoo 请求事务处理，转换成 JSON 会绕过其重试机制。
             raise
         except (RequiredFieldError, FieldTypeValidationError) as error:
-            return _protocol_error_response(_configured_error_for_exception(error), status=error_status)
+            return _protocol_error_response(_configured_error_for_exception(error))
         except GinlongAPIError as error:
-            return _protocol_error_response(error, status=error_status)
+            return _protocol_error_response(error)
         except (TypeError, ValueError) as error:
-            return _protocol_error_response(_configured_error_for_exception(error), status=error_status)
+            return _protocol_error_response(_configured_error_for_exception(error))
         except UserError as error:
-            return _protocol_error_response(_configured_error_for_exception(error), status=error_status)
+            return _protocol_error_response(_configured_error_for_exception(error))
         except Exception as error:
             _logger.exception("Ginlong %s business processing failed", api_code)
-            return _protocol_error_response(_configured_error_for_exception(error), status=error_status)
+            return _protocol_error_response(_configured_error_for_exception(error))
 
     @http.route(['/ginlong/sim/api01', '/api/ginlong/TPL_Pending_Receipt_Note'], type='http', auth='none', methods=['POST'], csrf=False)
     @api_logger
@@ -320,7 +336,7 @@ class GinlongSimulationController(http.Controller):
 
     @http.route(['/ginlong/sim/api03', '/api/ginlong/TPL_Pending_Delivery_Note'], type='http', auth='none', methods=['POST'], csrf=False)
     @api_logger
-    @ginlong_error_response("API03")
+    @ginlong_error_response("API03", strict_success=True)
     @validate_token
     @rate_limit("API03")
     def api03(self, **params):
@@ -330,13 +346,13 @@ class GinlongSimulationController(http.Controller):
             params: Odoo 路由参数；业务 JSON 从当前 HTTP request body 读取。
 
         返回：
-            API03 业务结果对应的 JSON HTTP Response。
+            仅含 returnStatus、exceptionInfo、operationTime 的 Ginlong JSON HTTP Response。
         """
-        return self._dispatch("API03", services.api03, error_status=400)
+        return self._dispatch("API03", services.api03)
 
     @http.route(['/ginlong/sim/api05', '/api/ginlong/TPL_Stocktake_Order'], type='http', auth='none', methods=['POST'], csrf=False)
     @api_logger
-    @ginlong_error_response("API05")
+    @ginlong_error_response("API05", strict_success=True)
     @validate_token
     @rate_limit("API05")
     def api05(self, **params):
@@ -346,7 +362,7 @@ class GinlongSimulationController(http.Controller):
             params: Odoo 路由参数；业务 JSON 从当前 HTTP request body 读取。
 
         返回：
-            API05 业务结果对应的 JSON HTTP Response。
+            仅含 returnStatus、exceptionInfo、operationTime 的 Ginlong JSON HTTP Response。
         """
         return self._dispatch("API05", services.api05)
 
@@ -370,6 +386,7 @@ class GinlongSimulationController(http.Controller):
     @api_logger
     @ginlong_error_response("API09")
     @validate_token
+    @rate_limit("API09")
     def api09(self, **params):
         """只读查询指定货主和仓库的实际物理库存，不更改库存记录。
 
@@ -381,6 +398,9 @@ class GinlongSimulationController(http.Controller):
         """
         payload = None
         try:
+            # API09 只读但仍要求有效 API User；不可只凭 Token 直接查询库存。
+            if not getattr(request, "api_user", False):
+                raise make_error("AUTH02", details="Authenticated Odoo user has no active API User")
             payload = json.loads(request.httprequest.data or b"{}")
             if not isinstance(payload, dict):
                 raise ValueError("Request body must be a JSON object")
@@ -391,11 +411,11 @@ class GinlongSimulationController(http.Controller):
         except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
             raise
         except (RequiredFieldError, FieldTypeValidationError, GinlongAPIError) as error:
-            return _protocol_error_response(_configured_error_for_exception(error), status=400)
+            return _protocol_error_response(_configured_error_for_exception(error))
         except (TypeError, ValueError) as error:
-            return _protocol_error_response(_configured_error_for_exception(error), status=400)
+            return _protocol_error_response(_configured_error_for_exception(error))
         except UserError as error:
-            return _protocol_error_response(_configured_error_for_exception(error), status=400)
+            return _protocol_error_response(_configured_error_for_exception(error))
         except Exception as error:
             _logger.exception("Ginlong API09 inventory query failed")
-            return _protocol_error_response(_configured_error_for_exception(error), status=500)
+            return _protocol_error_response(_configured_error_for_exception(error))

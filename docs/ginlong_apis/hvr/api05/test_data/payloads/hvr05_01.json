@@ -1,0 +1,39 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR05-20261122-SN-MIX",
+  "warehouse": "KRWH",
+  "remark": "HVR05 SN consistency",
+  "details": [
+    {
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL",
+      "quantity": 2
+    },
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 4
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR05-SN-MIX-01",
+      "quantity": 1,
+      "palletCode": "HVR05-SN-PALLET",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR05-SN-MIX-02",
+      "quantity": 1,
+      "palletCode": "HVR05-SN-PALLET",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": null,
+  "productCode": "HVR07-20261119-NULL-OWNER",
+  "productName": "HVR07 原材料产品",
+  "specificationModel": "HVR07-RAW-MODEL",
+  "unit": "台",
+  "productForm": "原材料",
+  "power": "5kW",
+  "nationalStandard": "HVR07-STD",
+  "certificationModel": "HVR07-CERT",
+  "weight": 0,
+  "length": 0,
+  "width": 0,
+  "height": 0
+}

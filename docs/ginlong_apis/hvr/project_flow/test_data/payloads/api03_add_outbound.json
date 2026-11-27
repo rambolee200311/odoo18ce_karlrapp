@@ -1,0 +1,31 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "outboundOrderNo": "HVR-FLOW-20261125-OUT-001",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "项目级连续业务主链：使用 API07/API01 同一货主与产品",
+  "customer": "Ginlong Technologies Co., Ltd",
+  "details": [
+    {
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001",
+      "quantity": 1,
+      "net_wt_machine": 1.25,
+      "net_wt_total": 1.25,
+      "pack_qty": 1,
+      "pallet_qty": 1,
+      "pallet_len": 1000,
+      "pallet_wid": 800,
+      "pallet_hgt": 900,
+      "unit_vol": 0.72,
+      "pack_unit": "台",
+      "pack_wt": 0,
+      "pallet_total_wt": 1.25,
+      "total_vol": 0.72,
+      "carton_wt_total": 1.25,
+      "gross_wt_total": 1.25
+    }
+  ]
+}

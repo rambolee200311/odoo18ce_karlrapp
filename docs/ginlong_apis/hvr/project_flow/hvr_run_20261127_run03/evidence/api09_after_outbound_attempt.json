@@ -1,0 +1,8 @@
+{
+  "httpStatus": 0,
+  "request": {
+    "owner": "HVR-GIN005-OWNER",
+    "warehouse": "KRWH"
+  },
+  "responseRaw": "URLError(PermissionError(1, 'Operation not permitted'))"
+}

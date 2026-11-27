@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR-GIN005-OWNER",
+  "productCode": "HVR-REAL-20261128-FG",
+  "productName": "HVR 真实人工验收成品",
+  "specificationModel": "HVR-REAL-FG-MODEL",
+  "unit": "台",
+  "power": "5kW",
+  "nationalStandard": "HVR-REAL-STD",
+  "certificationModel": "HVR-REAL-FG-CERT",
+  "productForm": "成品",
+  "weight": 1.25,
+  "length": 120,
+  "width": 100,
+  "height": 90
+}

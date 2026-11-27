@@ -1,0 +1,28 @@
+{
+  "sentAt": "2026-11-27T16:17:51+08:00",
+  "method": "POST",
+  "url": "http://127.0.0.1:8099/api/ginlong/TPL_Product_Master",
+  "payloadFile": "api07_03_raw.json",
+  "requestPayload": {
+    "action": "Add",
+    "owner": "HVR-GIN005-OWNER",
+    "productCode": "HVR-FINAL-20261127-RAW",
+    "productName": "HVR 最终主链原材料",
+    "specificationModel": "HVR-FINAL-RAW-MODEL",
+    "unit": "台",
+    "power": "0kW",
+    "nationalStandard": "HVR-FINAL-STD",
+    "certificationModel": "HVR-FINAL-RAW-CERT",
+    "productForm": "原材料",
+    "weight": 0.5,
+    "length": 60,
+    "width": 40,
+    "height": 30
+  },
+  "httpStatus": 200,
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 08:17:51"
+  }
+}

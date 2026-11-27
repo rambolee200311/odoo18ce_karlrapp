@@ -46,6 +46,6 @@ curl --silent --show-error --request POST \
   "${GINLONG_HVR_BASE_URL%/}/api/ginlong/${object_id}" \
   --header 'Accept: application/json' \
   --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer ${token}" \
+  --header "Authorization: ${token}" \
   --data-binary "@${payload}"
 printf '\n'

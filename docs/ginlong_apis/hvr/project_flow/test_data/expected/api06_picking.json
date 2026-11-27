@@ -1,0 +1,17 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "CREATE",
+  "outboundOrderNo": "HVR-FLOW-20261125-OUT-001",
+  "palletQty": "1",
+  "totalWeight": "1.25",
+  "snList": [
+    {
+      "productSN": "HVR-FLOW-SN-001",
+      "quantity": 1,
+      "palletCode": "<实际备货 move line 的 package 名称>",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "operator": "<实际备货操作人编码>",
+      "operationTime": "<已保存的实际备货操作时间>"
+    }
+  ]
+}

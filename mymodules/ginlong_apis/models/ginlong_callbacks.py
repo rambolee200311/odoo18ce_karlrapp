@@ -57,33 +57,38 @@ def _decimal_string(value):
     return ("%.6f" % float(value)).rstrip("0").rstrip(".") or "0"
 
 
-def _api04_payload(order):
-    """从已保存并选中的入库 Picking/move line 生成 API04 实际入库报文。
+def _api04_payload(order, picking):
+    """从一张已完成入库 Picking 的 move line 生成 API04 实际入库报文。
 
     参数：
         order: 已保存的 WorldDepot 入库单。
+        picking: 当前订单关联且已经完成的 incoming Picking。
 
     返回：
         包含订单号和 SN 明细的回传字典；明细字段直接读取实际 move line。
     """
-    pickings = order.ginlong_stock_picking_ids.filtered("ginlong_callback_selected")
-    if not pickings:
-        raise UserError(_("API04 请先在 Ginlong 回传数据页选择本次入库作业单。"))
-    lines = pickings.mapped("move_line_ids").filtered(lambda line: line.quantity > 0)
+    lines = picking.move_line_ids.filtered(lambda line: line.quantity > 0)
     if not lines:
-        raise UserError(_("API04 找不到关联入库作业的实际 move line。"))
+        raise UserError(_("API04 入库作业单 %s 没有实际 move line。") % picking.display_name)
+    operator = picking.ginlong_actual_inbound_operator_id
+    if not operator:
+        raise UserError(_("API04 入库作业单 %s 缺少实际确认人。") % picking.display_name)
 
     sn_list = []
     for line in lines:
         label = _("API04 move line %s") % (line.id,)
         package = line.result_package_id or line.package_id
+        product_code = line.product_id.ginlong_product_code
+        # 非 SN 产品没有单件序列号，按已确认的 Ginlong 规则用产品编码标识实际数量行。
+        product_sn = product_code if line.product_id.tracking == "none" else line.lot_id.name
         values = {
-            "productSN": line.lot_id.name,
+            "productSN": product_sn,
             "quantity": line.quantity,
             "palletCode": package.name if package else False,
-            "productCode": line.product_id.ginlong_product_code,
-            "operator": line.ginlong_operator_code,
-            "operationTime": _operation_time(line.ginlong_operation_time, label),
+            "productCode": product_code,
+            # V3.2 的操作人/时间按 SN 行提供；实际事实只有 Picking 级来源，因此重复该 Picking 的确认人和完成时间。
+            "operator": operator.login,
+            "operationTime": _operation_time(picking.date_done, label),
         }
         sn_list.append(values)
     return {
@@ -111,8 +116,12 @@ def _api10_payload(order):
     sn_list = []
     for result in results:
         label = _("API10 实盘结果 %s") % (result.id,)
+        product_sn = result.serial_number
+        if result.product_id and result.product_id.tracking == "none":
+            # 实盘仍以结果记录的数量和托盘为准；产品编码是协议标识，不是伪造的单件 SN。
+            product_sn = result.product_code
         values = {
-            "productSN": result.serial_number,
+            "productSN": product_sn,
             "quantity": result.quantity,
             "palletCode": result.pallet_code,
             "productCode": result.product_code,
@@ -128,8 +137,24 @@ def _api10_payload(order):
     }
 
 
+def _api06_pickings(order):
+    """按当前出库订单查找已完成的一步出库 Picking。
+
+    参数：
+        order: 已保存的 WorldDepot 出库单。
+
+    返回：
+        通过 `outbound_order_id` 关联、状态为 Done 且类型为 outgoing 的 Picking。
+    """
+    return order.env["stock.picking"].search([
+        ("outbound_order_id", "=", order.id),
+        ("state", "=", "done"),
+        ("picking_type_id.code", "=", "outgoing"),
+    ], order="id")
+
+
 def _api06_payload(order):
-    """从已保存且选中的出库作业行及 Order 汇总值生成 API06 报文。
+    """从当前订单已完成 outgoing Picking 的作业行及汇总值生成 API06 报文。
 
     参数：
         order: 已保存的 WorldDepot 出库单。
@@ -137,9 +162,11 @@ def _api06_payload(order):
     返回：
         包含订单号、托盘数量、总重量及实际备货明细的回传字典。
     """
-    pickings = order.ginlong_stock_picking_ids.filtered("ginlong_callback_selected")
+    # 项目采用一步出库：实际 Done 的 outgoing Picking 已是本订单备货结果，
+    # 无需再要求用户勾选回传范围。
+    pickings = _api06_pickings(order)
     if not pickings:
-        raise UserError(_("API06 请先在 Ginlong 回传数据页选择本次备货作业单。"))
+        raise UserError(_("API06 当前出库单没有已完成的 outgoing Picking。"))
     lines = pickings.mapped("move_line_ids").filtered(lambda line: line.quantity > 0)
     if not lines:
         raise UserError(_("API06 找不到关联备货作业的实际 move line。"))
@@ -147,11 +174,14 @@ def _api06_payload(order):
     sn_list = []
     for line in lines:
         label = _("API06 move line %s") % line.id
+        product_code = line.product_id.ginlong_product_code
+        # 非 SN 产品无论作业行是否带历史 Lot，都以产品编码表达实际数量。
+        product_sn = product_code if line.product_id.tracking == "none" else line.lot_id.name
         values = {
-            "productSN": line.lot_id.name,
+            "productSN": product_sn,
             "quantity": line.quantity,
             "palletCode": line.package_id.name if line.package_id else False,
-            "productCode": line.product_id.ginlong_product_code,
+            "productCode": product_code,
             "operator": line.ginlong_operator_code,
             "operationTime": _operation_time(line.ginlong_operation_time, label),
         }
@@ -187,17 +217,18 @@ def _details_confirmation_status(details, field_name, label):
 
 
 def _api02_payload(order):
-    """从入库 Order 的已保存收货明细生成 API02 确认报文。
+    """从入库 Order 的业务状态生成 API02 订单级确认报文。
 
     参数：
         order: 已保存的 WorldDepot 入库单。
 
     返回：
-        含订单号、UPDATE Action 和订单级收货确认值的字典。
+        含订单号、UPDATE Action 和状态映射结果的字典。
     """
-    confirmed = _details_confirmation_status(
-        order.ginlong_receipt_detail_ids, "receipt_status", "API02"
-    )
+    status_map = {"planning": "N", "arrive": "Y", "inbound": "Y"}
+    confirmed = status_map.get(order.status)
+    if confirmed is None:
+        raise UserError(_("API02 入库单 %s 的收货状态无法映射：%s") % (order.display_name, order.status or "空值"))
     return {
         "inboundOrderNo": order.reference,
         "action": _canonical_action("API02"),
@@ -206,21 +237,22 @@ def _api02_payload(order):
 
 
 def _api08_payload(order):
-    """从出库 Order 的已保存发货明细生成 API08 确认报文。
+    """从已离仓的出库 Order 生成订单级 API08 发货确认报文。
 
     参数：
         order: 已保存的 WorldDepot 出库单。
 
     返回：
-        含订单号、CREATE Action 和订单级发货确认值的字典。
+        含订单号、CREATE Action 和发货确认值 Y 的字典。
     """
-    confirmed = _details_confirmation_status(
-        order.ginlong_shipment_detail_ids, "shipment_status", "API08"
-    )
+    if not _api06_pickings(order):
+        raise UserError(_("API08 需要当前出库单存在已完成的 outgoing Picking。"))
+    if order.status != "outbound":
+        raise UserError(_("API08 需要出库单状态为 Outbound。"))
     return {
         "outboundOrderNo": order.reference,
         "action": _canonical_action("API08"),
-        "shipmentConfirmed": confirmed,
+        "shipmentConfirmed": "Y",
     }
 
 
@@ -235,7 +267,7 @@ def _build_payload(api_code, order):
         与接口对应的 Python 字典，后续由 HTTP 客户端序列化为 JSON。
     """
     if api_code == "API04":
-        return _api04_payload(order)
+        raise UserError(_("API04 必须以单张实际入库 Picking 为回传单位。"))
     if api_code == "API06":
         return _api06_payload(order)
     if api_code == "API10":
@@ -292,7 +324,8 @@ def _redact_endpoint_secrets(value, endpoint):
     return value
 
 
-def _write_api_log(order, api_code, endpoint, payload, response_text, status_code, error):
+def _write_api_log(order, api_code, endpoint, payload, response_text, status_code, error,
+                   source_record=None, source_label=None, idempotency_record=None):
     """向现有 WorldDepot API 日志追加一次发送尝试及来源单据引用。
 
     参数：
@@ -303,6 +336,8 @@ def _write_api_log(order, api_code, endpoint, payload, response_text, status_cod
         response_text: HTTP 响应正文。
         status_code: HTTP 状态码；未发送时为 None。
         error: 发送或业务错误文本。
+        source_record: 可选的具体来源记录；API04 使用该 Picking 关联事件日志。
+        source_label: 可选的业务来源标签，便于区分同一订单下的分批尝试。
     """
     project = getattr(order, "project_id", False) or getattr(order, "project", False)
     request_data = json.dumps(payload, ensure_ascii=False) if payload is not None else ""
@@ -314,14 +349,16 @@ def _write_api_log(order, api_code, endpoint, payload, response_text, status_cod
         "request_source": "Odoo user: %s" % order.env.user.login,
         "request_time": fields.Datetime.now(),
         "request_path": safe_endpoint,
-        "source_record": "%s,%s" % (order._name, order.id),
+        "source_record": "%s,%s" % ((source_record or order)._name, (source_record or order).id),
+        "ginlong_idempotency_id": idempotency_record.id if idempotency_record else False,
         "request_data": request_data,
         "response_data": safe_response,
         "exception_details": safe_error or False,
         "status": "success" if status_code and 200 <= status_code < 300 and not safe_error else "error",
         "success": bool(status_code and 200 <= status_code < 300 and not safe_error),
         "code": str(status_code or "BLOCKED"),
-        "msg": safe_error or ("HTTP %s" % status_code if status_code else "%s 回传未发送" % api_code),
+        "msg": safe_error or (("%s：" % source_label) if source_label else "") +
+               ("HTTP %s" % status_code if status_code else "%s 回传未发送" % api_code),
         "data": safe_response,
     })
 
@@ -353,7 +390,347 @@ def _response_error(response, api_code):
     return False
 
 
+def _callback_context(order, api_code, source_record=None):
+    """为回传事件生成不依赖 write_date 的稳定业务来源上下文。"""
+    source_record = source_record or order
+    source_key = (
+        getattr(order, "reference", False)
+        or getattr(order, "count_order_no", False)
+        or str(order.id)
+    )
+    if api_code == "API04":
+        source_key = "%s:%s" % (source_key, source_record.name or source_record.id)
+    return {"source": {
+        "model": source_record._name,
+        "id": source_record.id,
+        "business_key": source_key,
+    }}
+
+
+def _callback_candidates(order, api_code):
+    """从现有业务记录收集事件；API04 保持每张 Picking 一个事件。"""
+    if api_code != "API04":
+        payload = _build_payload(api_code, order)
+        validate_payload(api_code, payload, direction="request")
+        return [{
+            "source": order,
+            "payload": payload,
+            "context": _callback_context(order, api_code),
+            "label": order.display_name,
+        }]
+
+    order.env.flush_all()
+    pickings = order.env["stock.picking"].search([
+        ("inbound_order_id", "=", order.id),
+        ("state", "=", "done"),
+        ("picking_type_id.code", "=", "incoming"),
+    ], order="id")
+    if not pickings:
+        raise UserError(_("API04 当前入库单没有已完成的 incoming Picking。"))
+    candidates = []
+    for picking in pickings:
+        candidate = {"source": picking, "payload": None,
+                     "context": _callback_context(order, api_code, picking),
+                     "label": picking.display_name}
+        try:
+            candidate["payload"] = _api04_payload(order, picking)
+            validate_payload(api_code, candidate["payload"], direction="request")
+        except Exception as exc:
+            candidate["error"] = str(exc)
+        candidates.append(candidate)
+    return candidates
+
+
+def _callback_outcome(response, api_code):
+    """按 V3.2 回应证据区分确定成功、确定拒绝及结果未知。
+
+    只有符合成功响应契约的 2xx/Y，以及明确返回 returnStatus=N 的拒绝
+    才能定类；普通 HTTP 错误码或不完整回应不能证明对端没有处理请求。
+    """
+    try:
+        data = response.json()
+    except (TypeError, ValueError):
+        data = None
+    # 只有契约明确返回 N 才能确认 Ginlong 拒绝；超时、5xx 或无效响应均可能已处理。
+    if isinstance(data, dict) and str(data.get("returnStatus") or "").strip().casefold() == "n":
+        return {"state": "failed", "error": data.get("exceptionInfo") or _("Ginlong 明确拒绝本次回传。")}
+    if response.status_code >= 500:
+        return {"state": "unknown", "error": _("Ginlong HTTP 返回 5xx；对端是否处理无法确定。")}
+    if not 200 <= response.status_code < 300:
+        # 仅有 HTTP 状态码不能证明 Ginlong 业务 Handler 没有执行；只有协议明确的 N
+        # 才分类为可直接重试的失败，其他非 2xx 都保留未知并交由用户确认。
+        return {"state": "unknown", "error": _("Ginlong HTTP 返回状态 %s，无法确认对端是否处理。") % response.status_code}
+    if not isinstance(data, dict):
+        return {"state": "unknown", "error": _("Ginlong 已返回 HTTP 响应，但响应内容无法确认处理结果。")}
+    try:
+        validate_payload(api_code, data, direction="response")
+    except (RequiredFieldError, FieldTypeValidationError) as exc:
+        return {"state": "unknown", "error": _("Ginlong 响应不完整，无法确定对端处理结果：%s") % exc}
+    return_status = str(data.get("returnStatus") or "").strip().casefold()
+    if return_status == "y":
+        return {"state": "succeeded", "error": False}
+    return {"state": "unknown", "error": _("Ginlong 响应未能明确确认成功或拒绝。")}
+
+
+def _candidate_snapshot(order, api_code, candidate, status):
+    """仅保存来源引用和指纹，确认时重新从 ORM 读取并生成 Payload。"""
+    identity = idempotency.inspect_callback_event(
+        order.env, api_code, candidate["payload"], candidate["context"], candidate["source"],
+    )
+    return {
+        "source_model": candidate["source"]._name,
+        "source_id": candidate["source"].id,
+        "label": candidate["label"],
+        "stable_key": identity["stable_key"],
+        "fingerprint": identity["fingerprint"],
+        "state": status or identity["state"],
+        "generation": identity.get("generation", 0),
+        "legacy_log_id": identity.get("legacy_log_id") or False,
+        "event_id": identity.get("event_id") or False,
+        "completed_at": fields.Datetime.to_string(identity["completed_at"]) if identity.get("completed_at") else False,
+        "response": identity.get("response") or {},
+    }
+
+
+def _callback_confirmation_action(order, api_code, candidates, classifications):
+    """打开通用业务确认向导，供业务用户决定是否重复发送。"""
+    event_rows = []
+    display_lines = []
+    for candidate, classification in zip(candidates, classifications):
+        status = classification.get("state", "new")
+        snapshot = _candidate_snapshot(order, api_code, candidate, status)
+        event_rows.append(snapshot)
+        when = snapshot.get("completed_at") or "无"
+        result = classification.get("response") or {}
+        error = (result.get("error") if isinstance(result, dict) else False) or ""
+        response_text = result.get("response_text", "") if isinstance(result, dict) else ""
+        response_summary = ""
+        try:
+            response_data = json.loads(response_text) if response_text else {}
+            if isinstance(response_data, dict):
+                response_summary = "; ".join(
+                    "%s=%s" % (key, response_data[key])
+                    for key in ("returnStatus", "exceptionInfo", "operationTime")
+                    if response_data.get(key) not in (None, "")
+                )
+        except (TypeError, ValueError):
+            response_summary = ""
+        result_text = error or response_summary or ("已收到成功结果" if status == "succeeded" else "")
+        display_lines.append("%s：%s；上次时间：%s%s" % (
+            snapshot["label"], status, when, ("；结果：%s" % result_text) if result_text else "",
+        ))
+    multi = len(event_rows) > 1
+    wizard = order.env["ginlong.api.callback.confirmation"].create({
+        "api_code": api_code,
+        "source_record": "%s,%s" % (order._name, order.id),
+        "event_snapshots": json.dumps(event_rows, ensure_ascii=False, separators=(",", ":")),
+        "event_summary": "\n".join("%s：%s" % (row["label"], row["state"]) for row in event_rows),
+        "history_summary": "\n".join(display_lines),
+        "multi_event": multi,
+        "has_unknown": any(item.get("state") == "unknown" for item in classifications),
+        "scope": "unsuccessful",
+    })
+    view = order.env.ref("ginlong_apis.view_ginlong_callback_confirmation_form")
+    return {
+        "type": "ir.actions.act_window",
+        "name": _("确认 Ginlong 回传"),
+        "res_model": wizard._name,
+        "res_id": wizard.id,
+        "views": [(view.id, "form")],
+        "view_mode": "form",
+        "target": "new",
+    }
+
+
+def _callback_chatter(order, api_code, decision, scope, labels):
+    """将确认或取消决定追加至来源订单的 Chatter，不修改既有业务事实。"""
+    if hasattr(order, "message_post"):
+        order.message_post(body=_(
+            "Ginlong %(api)s 回传确认：%(decision)s；范围：%(scope)s；对象：%(labels)s；用户：%(user)s；时间：%(time)s。"
+        ) % {
+            "api": api_code, "decision": decision, "scope": scope,
+            "labels": ", ".join(labels), "user": order.env.user.display_name,
+            "time": fields.Datetime.to_string(fields.Datetime.now()),
+        })
+
+
+def _send_callback_candidate(order, api_code, url, candidate, invoked_at,
+                             expected_generation=None, confirmation_token=None,
+                             force_repeat=False, legacy_log_id=None):
+    """通过现有幂等记录串行发送一个业务事件，并将实际 HTTP 与 Event 关联。"""
+    payload = candidate["payload"]
+    def send_once():
+        """执行单次 POST；传输异常不能证明接收方未处理，统一标记 unknown。"""
+        try:
+            response = requests.post(
+                url, json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=_HTTP_TIMEOUT,
+            )
+        except (requests.exceptions.InvalidURL, requests.exceptions.InvalidSchema,
+                requests.exceptions.MissingSchema, requests.exceptions.InvalidHeader) as exc:
+            # 请求参数在连接建立前即被客户端拒绝，可确定对端没有收到报文。
+            return {"state": "failed", "status_code": None, "response_text": "", "error": str(exc)}
+        except requests.RequestException as exc:
+            # 连接重置、读超时等可能发生在对端已处理之后，不能当作确定失败。
+            return {"state": "unknown", "status_code": None, "response_text": "", "error": str(exc)}
+        outcome = _callback_outcome(response, api_code)
+        return {"state": outcome["state"], "status_code": response.status_code,
+                "response_text": response.text or "", "error": outcome["error"]}
+
+    execution = idempotency.execute_callback_event(
+        order.env, api_code, payload, candidate["context"], candidate["source"], send_once,
+        invoked_at=invoked_at, expected_generation=expected_generation,
+        confirmation_token=confirmation_token, confirmed_by_id=order.env.user.id if confirmation_token else False,
+        legacy_log_id=legacy_log_id, force_repeat=force_repeat,
+    )
+    if not execution["sent"]:
+        return execution
+    outcome = execution["result"]
+    _write_api_log(
+        order, api_code, url, payload, outcome.get("response_text") or "",
+        outcome.get("status_code"), outcome.get("error") or False,
+        source_record=candidate["source"], source_label=candidate["label"],
+        idempotency_record=execution["record"],
+    )
+    return execution
+
+
+def _process_confirmable_callbacks(order, api_code, url, candidates, invoked_at,
+                                   selection=None, snapshots=None, confirmation_token=None,
+                                   include_unknown=False, user_id=None):
+    """对单事件或多事件执行统一判重、确认范围选择和实际发送。"""
+    classifications = []
+    for candidate in candidates:
+        if candidate.get("error"):
+            classifications.append({"state": "failed", "error": candidate["error"]})
+            continue
+        classifications.append(idempotency.inspect_callback_event(
+            order.env, api_code, candidate["payload"], candidate["context"],
+            candidate["source"], invoked_at=invoked_at,
+        ))
+
+    if selection is None:
+        if any(item["state"] in {"succeeded", "unknown"} for item in classifications):
+            return _callback_confirmation_action(order, api_code, candidates, classifications)
+        if any(item["state"] in {"processing", "overlap"} for item in classifications) and not any(
+            item["state"] in {"new", "failed"} for item in classifications
+        ):
+            _callback_chatter(order, api_code, "并发请求未重复发送", "当前回传", [c["label"] for c in candidates])
+            return _callback_notification(_("同一回传事件正在处理或刚完成，本次没有再次发送。"), success=False)
+
+    snapshot_by_key = {item["stable_key"]: item for item in (snapshots or [])}
+    sent = 0
+    skipped = 0
+    failures = []
+    for candidate, classification in zip(candidates, classifications):
+        status = classification["state"]
+        snapshot = snapshot_by_key.get(classification.get("stable_key"))
+        if selection == "cancel":
+            skipped += 1
+            continue
+        if selection == "unsuccessful" and status == "succeeded":
+            skipped += 1
+            continue
+        if status in {"processing", "overlap"}:
+            skipped += 1
+            failures.append("%s：事件正在处理或刚完成，未重复发送" % candidate["label"])
+            continue
+        if status == "unknown" and not include_unknown:
+            skipped += 1
+            failures.append("%s：结果未知；未确认风险，已跳过" % candidate["label"])
+            continue
+        if status == "succeeded" and selection != "all" and not (snapshot and snapshot.get("state") == "succeeded"):
+            skipped += 1
+            continue
+        if status == "succeeded" and selection is None:
+            return _callback_confirmation_action(order, api_code, candidates, classifications)
+
+        token = False
+        force_repeat = False
+        legacy_id = False
+        expected_generation = None
+        # 首次发送和失败重试也携带按钮判定时看到的事件代次，以阻止等待中的
+        # 第二个事务在前一个请求提交后继续外发；不依赖秒级 Datetime 排序。
+        if selection is None:
+            expected_generation = classification.get("generation")
+        if selection is not None and snapshot:
+            expected_generation = snapshot.get("generation")
+            # 只在用户明确选择全量重发，或确认当前成功/未知项时创建新 Event。
+            force_repeat = status == "succeeded" or (
+                status == "unknown" and include_unknown
+            )
+            if force_repeat:
+                import hashlib as _hashlib
+                token = _hashlib.sha256(
+                    (confirmation_token + classification["stable_key"]).encode("utf-8")
+                ).hexdigest()
+                legacy_id = snapshot.get("legacy_log_id") or False
+        execution = _send_callback_candidate(
+            order, api_code, url, candidate, invoked_at,
+            expected_generation=expected_generation, confirmation_token=token,
+            force_repeat=force_repeat, legacy_log_id=legacy_id,
+        )
+        if execution["sent"]:
+            sent += 1
+            if execution["state"] != "succeeded":
+                result = execution.get("result") or {}
+                failures.append("%s：%s" % (candidate["label"], result.get("error") or execution["state"]))
+        else:
+            skipped += 1
+            failures.append("%s：%s" % (candidate["label"], execution.get("reason") or execution["state"]))
+
+    if selection == "cancel":
+        _callback_chatter(order, api_code, "取消回传", selection, [c["label"] for c in candidates])
+        return _callback_notification(_("已取消，本次没有发送 HTTP 请求。"), success=False)
+    if selection is not None:
+        _callback_chatter(order, api_code, "确认回传", selection, [c["label"] for c in candidates])
+    message = _("本次实际发送 %(sent)s 个事件，未发送/跳过 %(skipped)s 个。") % {
+        "sent": sent, "skipped": skipped,
+    }
+    if failures:
+        message += "\n" + "\n".join(failures)
+    return _callback_notification(message, success=not failures and sent > 0)
+
+
+def _send_confirmable_callback(order, api_code, url):
+    """处理 API02/04/06/08 的重复回传确认及稳定事件并发控制。"""
+    invoked_at = idempotency.callback_now()
+    try:
+        if not url:
+            raise UserError(_("请先由管理员配置该接口的完整 Endpoint URL。"))
+        order.env.flush_all()
+        candidates = _callback_candidates(order, api_code)
+        invalid = [candidate for candidate in candidates if candidate.get("error")]
+        for candidate in invalid:
+            _write_api_log(
+                order, api_code, url, candidate.get("payload"), "", None,
+                candidate["error"], source_record=candidate["source"],
+                source_label=candidate["label"],
+            )
+        candidates = [candidate for candidate in candidates if not candidate.get("error")]
+        if not candidates:
+            return _callback_notification(_("没有可发送的有效回传事件；请查看 API 日志。"), success=False)
+        return _process_confirmable_callbacks(order, api_code, url, candidates, invoked_at)
+    except PG_CONCURRENCY_EXCEPTIONS_TO_RETRY:
+        raise
+    except Exception as exc:
+        error = _redact_endpoint_secrets(str(exc), url)
+        _logger.exception("Ginlong callback %s failed before dispatch", api_code)
+        _write_api_log(order, api_code, url, None, "", None, error)
+        return _callback_notification(error, success=False)
+
+
 def send_callback(order, api_code):
+    """统一人工回传入口；API10 保留既有行为，其余四个接口启用确认机制。"""
+    order.ensure_one()
+    endpoint = order.env["res.config.settings"].get_ginlong_callback_endpoint(api_code)
+    if api_code in {"API02", "API04", "API06", "API08"}:
+        return _send_confirmable_callback(order, api_code, endpoint["url"])
+    return _send_legacy_callback(order, api_code)
+
+
+def _send_legacy_callback(order, api_code):
     """读取已保存 ORM 数据，同步 POST Ginlong 并记录本次结果。
 
     参数：
@@ -366,6 +743,8 @@ def send_callback(order, api_code):
     order.ensure_one()
     endpoint = order.env["res.config.settings"].get_ginlong_callback_endpoint(api_code)
     url = endpoint["url"]
+    if api_code == "API04":
+        return _send_api04_pickings(order, url)
     payload = None
     response_text = ""
     status_code = None
@@ -457,6 +836,24 @@ def send_callback(order, api_code):
     }
 
 
+def _send_api04_pickings(order, url):
+    """保留旧内部调用名，但统一转入 API04 的通用回传确认流程。"""
+    return _send_confirmable_callback(order, "API04", url)
+
+def _callback_notification(message, success=False):
+    """生成统一的 Odoo 客户端通知，显示本次回传操作结果。"""
+    return {
+        "type": "ir.actions.client",
+        "tag": "display_notification",
+        "params": {
+            "title": _("Ginlong 回传结果"),
+            "message": message,
+            "type": "success" if success else "danger",
+            "sticky": True,
+        },
+    }
+
+
 class InboundOrder(models.Model):
     """为入库单提供 Ginlong 回传按钮和关联的实际入库作业单。"""
 
@@ -465,6 +862,32 @@ class InboundOrder(models.Model):
     ginlong_stock_picking_ids = fields.One2many(
         "stock.picking", "inbound_order_id", string="Ginlong 入库作业单",
     )
+    ginlong_api02_last_success = fields.Boolean(compute="_compute_ginlong_callback_status")
+    ginlong_api02_last_time = fields.Datetime(compute="_compute_ginlong_callback_status")
+    ginlong_api02_last_error = fields.Text(compute="_compute_ginlong_callback_status")
+    ginlong_api04_last_success = fields.Boolean(compute="_compute_ginlong_callback_status")
+    ginlong_api04_last_time = fields.Datetime(compute="_compute_ginlong_callback_status")
+    ginlong_api04_last_error = fields.Text(compute="_compute_ginlong_callback_status")
+
+    def _compute_ginlong_callback_status(self):
+        """从既有 API Log 只读计算 API02/API04 最近一次尝试结果。"""
+        log_model = self.env["world.depot.api.log"].sudo()
+        for order in self:
+            order_ref = "%s,%s" % (order._name, order.id)
+            picking_refs = ["stock.picking,%s" % picking.id for picking in order.ginlong_stock_picking_ids]
+            for api_code, refs in (
+                ("API02", [order_ref]),
+                ("API04", [order_ref] + picking_refs),
+            ):
+                log = log_model.search([
+                    ("ginlong_api_code", "=", api_code),
+                    ("source_record", "in", refs),
+                ], order="request_time desc, id desc", limit=1) if refs else log_model
+                order[f"ginlong_{api_code.lower()}_last_success"] = bool(log and log.success)
+                order[f"ginlong_{api_code.lower()}_last_time"] = log.request_time if log else False
+                order[f"ginlong_{api_code.lower()}_last_error"] = (
+                    log.exception_details or False if log else False
+                )
 
     def action_ginlong_api02(self):
         """手动发送当前入库单的收货确认状态。
@@ -475,7 +898,7 @@ class InboundOrder(models.Model):
         return send_callback(self, "API02")
 
     def action_ginlong_api04(self):
-        """手动发送当前入库单已选 Picking 的实际入库结果。
+        """手动发送当前入库单的所有合格 Picking 实际入库结果。
 
         返回：
             显示本次同步回传成功或失败结果的客户端通知 Action。
@@ -505,7 +928,8 @@ class OutboundOrder(models.Model):
     )
 
     @api.depends(
-        "ginlong_stock_picking_ids.ginlong_callback_selected",
+        "ginlong_stock_picking_ids.state",
+        "ginlong_stock_picking_ids.picking_type_id.code",
         "ginlong_stock_picking_ids.move_line_ids.package_id",
         "ginlong_stock_picking_ids.move_line_ids.quantity",
         "ginlong_stock_picking_ids.move_line_ids.product_id.product_tmpl_id.ginlong_weight",
@@ -513,9 +937,9 @@ class OutboundOrder(models.Model):
         "ginlong_gross_weight_manual_enabled", "ginlong_gross_weight_manual",
     )
     def _compute_ginlong_callback_totals(self):
-        """汇总已选实际作业行的托盘数和重量，并应用持久化人工覆盖值。"""
+        """汇总当前出库单已完成 outgoing Picking 的托盘和重量，并应用人工覆盖值。"""
         for order in self:
-            pickings = order.ginlong_stock_picking_ids.filtered("ginlong_callback_selected")
+            pickings = _api06_pickings(order)
             lines = pickings.mapped("move_line_ids").filtered(lambda line: line.quantity > 0)
             order.ginlong_pallet_qty_auto = len(set(lines.mapped("package_id").ids))
             order.ginlong_pallet_qty = (
@@ -533,7 +957,7 @@ class OutboundOrder(models.Model):
             )
 
     def action_ginlong_api06(self):
-        """手动发送当前出库单已选作业行的备货完成数据。
+        """手动发送当前出库单关联的 Done/outgoing Picking 备货结果。
 
         返回：
             显示本次同步回传成功或失败结果的客户端通知 Action。
@@ -541,11 +965,20 @@ class OutboundOrder(models.Model):
         return send_callback(self, "API06")
 
     def action_ginlong_api08(self):
-        """手动发送当前出库单的发货确认状态及实际作业数据。
+        """在关联 outgoing Picking 已完成后确认订单离仓并回传 API08。
+
+        本项目为一步出库：已完成的 outgoing Picking 已改变库存并构成实际作业依据。
+        此按钮只把订单业务状态改为 outbound，再发送订单级 API08，不创建作业单、
+        不维护重复发货明细，也不再次改变库存。
 
         返回：
             显示本次同步回传成功或失败结果的客户端通知 Action。
         """
+        self.ensure_one()
+        # Picking 未完成时不能确认订单离仓；send_callback 会按既有错误日志机制记录拒绝。
+        if _api06_pickings(self):
+            if self.status != "outbound":
+                self.write({"status": "outbound"})
         return send_callback(self, "API08")
 
 
@@ -597,13 +1030,33 @@ class StockMoveLine(models.Model):
 
 
 class StockPicking(models.Model):
-    """标记本次回传选用的实际 Picking；不改变 Picking 库存行为。"""
+    """记录 API04 实际入库确认人，并保留 API06 所需 Picking 标记。"""
 
     _inherit = "stock.picking"
 
     ginlong_callback_selected = fields.Boolean(
         string="纳入本次 Ginlong 回传", default=False, copy=False,
     )
+    ginlong_actual_inbound_operator_id = fields.Many2one(
+        "res.users", string="实际入库确认人", readonly=True, copy=False, tracking=True,
+    )
+
+    def button_validate(self):
+        """完成标准库存验证后记录实际入库确认用户。
+
+        只有本次 `button_validate` 已使 incoming Picking 进入 `done` 才写入；
+        历史值不覆盖，避免后续重复打开/验证把原确认人改成其他用户。
+        """
+        result = super().button_validate()
+        completed = self.filtered(
+            lambda picking: picking.state == "done"
+            and picking.picking_type_id.code == "incoming"
+            and picking.inbound_order_id
+            and not picking.ginlong_actual_inbound_operator_id
+        )
+        if completed:
+            completed.write({"ginlong_actual_inbound_operator_id": self.env.user.id})
+        return result
 
 
 class StocktakeResult(models.Model):

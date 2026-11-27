@@ -1,0 +1,14 @@
+{
+  "action": "Edit",
+  "owner": "HVR07-20261119-OWNER-A",
+  "productCode": "HVR07-20261119-EDIT-REPEAT",
+  "productName": "HVR07 重复编辑基准产品",
+  "specificationModel": "HVR07-REPEAT-MODEL",
+  "unit": "台",
+  "productForm": "半成品",
+  "power": "3kW",
+  "weight": 2.5,
+  "length": 100,
+  "width": 60,
+  "height": 40
+}

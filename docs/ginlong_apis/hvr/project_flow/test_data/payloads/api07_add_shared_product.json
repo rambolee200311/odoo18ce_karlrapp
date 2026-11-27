@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+  "productName": "HVR 项目级连续流程成品",
+  "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001",
+  "unit": "台",
+  "power": "5kW",
+  "nationalStandard": "HVR-PROJECT-FLOW-STD-001",
+  "certificationModel": "HVR-PROJECT-FLOW-CERT-001",
+  "productForm": "成品",
+  "weight": 1.25,
+  "length": 100,
+  "width": 80,
+  "height": 90
+}

@@ -61,10 +61,20 @@ class WorldDepotAPILog(models.Model):
             ("world.depot.outbound.order", "出库单"),
             ("world.depot.stocktake.order", "盘点单"),
             ("product.product", "产品"),
+            ("stock.picking", "入库作业单"),
         ],
         string="来源业务单据",
         index=True,
         copy=False,
+    )
+
+    ginlong_idempotency_id = fields.Many2one(
+        "ginlong.api.idempotency",
+        string="Ginlong 回传事件",
+        index=True,
+        readonly=True,
+        copy=False,
+        ondelete="set null",
     )
 
     @api.depends("request_path")

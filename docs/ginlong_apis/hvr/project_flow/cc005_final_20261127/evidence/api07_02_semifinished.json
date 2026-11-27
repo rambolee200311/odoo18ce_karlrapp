@@ -1,0 +1,28 @@
+{
+  "sentAt": "2026-11-27T16:17:29+08:00",
+  "method": "POST",
+  "url": "http://127.0.0.1:8099/api/ginlong/TPL_Product_Master",
+  "payloadFile": "api07_02_semifinished.json",
+  "requestPayload": {
+    "action": "Add",
+    "owner": "HVR-GIN005-OWNER",
+    "productCode": "HVR-FINAL-20261127-SF",
+    "productName": "HVR 最终主链半成品",
+    "specificationModel": "HVR-FINAL-SF-MODEL",
+    "unit": "台",
+    "power": "3kW",
+    "nationalStandard": "HVR-FINAL-STD",
+    "certificationModel": "HVR-FINAL-SF-CERT",
+    "productForm": "半成品",
+    "weight": 0.9,
+    "length": 100,
+    "width": 80,
+    "height": 70
+  },
+  "httpStatus": 200,
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 08:17:29"
+  }
+}

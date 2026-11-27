@@ -1,0 +1,14 @@
+{
+  "action": "Edit",
+  "owner": "HVR07-20261119-OWNER-A",
+  "productCode": "HVR07-20261119-EDIT-NAME",
+  "productName": "HVR07 修改后名称",
+  "specificationModel": "HVR07-EDITED-MODEL",
+  "unit": "台",
+  "productForm": "原材料",
+  "power": "1kW",
+  "weight": 1.25,
+  "length": 100,
+  "width": 50,
+  "height": 40
+}

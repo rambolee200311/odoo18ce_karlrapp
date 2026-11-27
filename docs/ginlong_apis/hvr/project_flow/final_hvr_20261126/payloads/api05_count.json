@@ -1,0 +1,33 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "CC5HVR-20261126-COUNT-01",
+  "warehouse": "KRWH",
+  "remark": "CC-GIN-005 最终模拟主链：盘点实际入库的两件成品",
+  "details": [
+    {
+      "productCode": "CC5HVR-20261126-P001",
+      "productName": "CC-GIN-005 HVR 连续主链成品",
+      "specificationModel": "CC5HVR-20261126-MODEL-001",
+      "quantity": 2
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "CC5HVR-20261126-SN-001",
+      "quantity": 1,
+      "palletCode": "CC5HVR-20261126-IN-01-0001",
+      "productCode": "CC5HVR-20261126-P001",
+      "productName": "CC-GIN-005 HVR 连续主链成品",
+      "specificationModel": "CC5HVR-20261126-MODEL-001"
+    },
+    {
+      "productSN": "CC5HVR-20261126-SN-002",
+      "quantity": 1,
+      "palletCode": "CC5HVR-20261126-IN-01-0001",
+      "productCode": "CC5HVR-20261126-P001",
+      "productName": "CC-GIN-005 HVR 连续主链成品",
+      "specificationModel": "CC5HVR-20261126-MODEL-001"
+    }
+  ]
+}

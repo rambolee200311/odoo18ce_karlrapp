@@ -1,0 +1,85 @@
+{
+  "httpStatus": 200,
+  "request": {
+    "owner": "HVR-GIN005-OWNER",
+    "action": "Add",
+    "countOrderNo": "HVR005-20261127-RUN03-COUNT-001",
+    "warehouse": "KRWH",
+    "remark": "CC-GIN-005 RUN03 出库后实际剩余库存盘点指令",
+    "details": [
+      {
+        "productCode": "HVR005-20261127-RUN03-FG",
+        "productName": "RUN03 HVR 成品 A",
+        "specificationModel": "RUN03-FG-MODEL",
+        "quantity": 2
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-SF",
+        "productName": "RUN03 HVR 半成品 B",
+        "specificationModel": "RUN03-SF-MODEL",
+        "quantity": 2
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-RAW",
+        "productName": "RUN03 HVR 原材料 C",
+        "specificationModel": "RUN03-RAW-MODEL",
+        "quantity": 9
+      }
+    ],
+    "snList": [
+      {
+        "productSN": "HVR005-20261127-RUN03-FG-SN-002",
+        "quantity": 1,
+        "palletCode": "HVR005-20261127-RUN03-PALLET-001",
+        "productCode": "HVR005-20261127-RUN03-FG",
+        "productName": "RUN03 HVR 成品 A",
+        "specificationModel": "RUN03-FG-MODEL"
+      },
+      {
+        "productSN": "HVR005-20261127-RUN03-FG-SN-003",
+        "quantity": 1,
+        "palletCode": "HVR005-20261127-RUN03-PALLET-002",
+        "productCode": "HVR005-20261127-RUN03-FG",
+        "productName": "RUN03 HVR 成品 A",
+        "specificationModel": "RUN03-FG-MODEL"
+      },
+      {
+        "productSN": "HVR005-20261127-RUN03-SF-SN-001",
+        "quantity": 1,
+        "palletCode": "HVR005-20261127-RUN03-PALLET-001",
+        "productCode": "HVR005-20261127-RUN03-SF",
+        "productName": "RUN03 HVR 半成品 B",
+        "specificationModel": "RUN03-SF-MODEL"
+      },
+      {
+        "productSN": "HVR005-20261127-RUN03-SF-SN-002",
+        "quantity": 1,
+        "palletCode": "HVR005-20261127-RUN03-PALLET-002",
+        "productCode": "HVR005-20261127-RUN03-SF",
+        "productName": "RUN03 HVR 半成品 B",
+        "specificationModel": "RUN03-SF-MODEL"
+      },
+      {
+        "productSN": "HVR005-20261127-RUN03-RAW",
+        "quantity": 5,
+        "palletCode": "HVR005-20261127-RUN03-PALLET-001",
+        "productCode": "HVR005-20261127-RUN03-RAW",
+        "productName": "RUN03 HVR 原材料 C",
+        "specificationModel": "RUN03-RAW-MODEL"
+      },
+      {
+        "productSN": "HVR005-20261127-RUN03-RAW",
+        "quantity": 4,
+        "palletCode": "HVR005-20261127-RUN03-PALLET-002",
+        "productCode": "HVR005-20261127-RUN03-RAW",
+        "productName": "RUN03 HVR 原材料 C",
+        "specificationModel": "RUN03-RAW-MODEL"
+      }
+    ]
+  },
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 07:05:33"
+  }
+}

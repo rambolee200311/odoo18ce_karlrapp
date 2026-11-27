@@ -1,0 +1,33 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR05-20261122-EXISTING-AND-UNRECEIVED",
+  "warehouse": "KRWH",
+  "details": [
+    {
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001",
+      "quantity": 2
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR-FLOW-SN-001",
+      "quantity": 1,
+      "palletCode": "HVR-FLOW-PALLET-001",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001"
+    },
+    {
+      "productSN": "HVR-FLOW-SN-UNRECEIVED-001",
+      "quantity": 1,
+      "palletCode": "HVR-FLOW-UNRECEIVED-PALLET",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001"
+    }
+  ],
+  "remark": "HVR05 SN 引用：引用项目主线已实际收货的 SN 与一条未收货 SN；不写库存"
+}

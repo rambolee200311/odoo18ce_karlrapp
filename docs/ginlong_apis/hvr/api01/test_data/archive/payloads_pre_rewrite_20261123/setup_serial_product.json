@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR01-20261122-PROD-SERIAL",
+  "productName": "HVR01 成品序列号验收产品",
+  "specificationModel": "HVR01-SERIAL-MODEL",
+  "unit": "台",
+  "productForm": "成品",
+  "power": "5kW",
+  "nationalStandard": "HVR01-SN-STD",
+  "certificationModel": "HVR01-SN-CERT",
+  "weight": 0,
+  "length": 0,
+  "width": 0,
+  "height": 0
+}

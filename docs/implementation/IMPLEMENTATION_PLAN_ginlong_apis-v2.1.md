@@ -70,6 +70,19 @@
 - 本轮升级前后比较结果：inbound 8、outbound 1、stocktake 1、product.product 29、幂等 17、WorldDepot API 日志 287，六类均无 ID 丢失/新增或关键字段变化。当前 8099 Registry 已加载 `ginlong_apis 18.0.2.0.42`。
 - 项目负责人 Human Review 已批准关闭 CC-GIN-008；阶段 4C 为 **Closed**，依据 FR-GIN-008。模板同步 BLOCKED 继续使用已批准例外；阶段 4 完整 WMS E2E 和阶段 5 真实 Ginlong 联调边界不变。
 
+## 10. CC-GIN-008 Human Review 后续规则补充（2026-11-24）
+
+Human Review 将 API01/03/05 的订单有效性检查扩展到支持的 Edit/Del：Del 只取消当前项目权限范围内的有效订单；订单已取消或没有有效订单时返回业务错误，不能重放历史成功响应；相同/不同 Payload 均适用。重新 Add 后，新有效订单可再次 Del。API01 V3.2 Action 仍为 Add/Del。
+
+此项纳入 CC-GIN-008 的后续收尾验证，不另开 CC；保持业务键、Add 规则、历史保留及 project 权限不变。自动化和升级验证结果追加到 ATR/IHR，原 CC-008 Closed 记录作为历史基线保留。
+
+### 10.1 补充规则实施结果
+
+- API01/03/05 Add、Edit、Del 已按当前有效业务记录实现；Del 在幂等结果读取前检查当前项目内有效订单。重复 Del 返回 `BUS01: 有效订单不存在或已取消`，不会重放或新增成功幂等结果。取消后重新 Add 的订单可再次 Del。
+- 最终 Ginlong 全量自动化 R3：74 post-tests、0 failed、0 error(s)；API01/03/05 的同/不同 Payload 重复 Del、cancel 后 Edit 拒绝、重新 Add 后 Del 成功均由真实 HTTP 路由和 ORM 断言覆盖。详见 ATR/IHR-GIN-008。
+- 本地 8099 已重启加载 `ginlong_apis 18.0.2.0.43`；ORM 状态为 installed，Registry loaded，`/web/login` 返回 HTTP 200。
+- 原 CC-GIN-008 Closed 记录、人工 HVR N/A/Deferred 和模板同步 BLOCKED 均按历史及批准状态保留；本次未另开 CC、未执行真实外部联调或 Git 提交。
+
 ## 8. 版本记录
 
 | 版本 | 日期 | 变更 | 状态 |

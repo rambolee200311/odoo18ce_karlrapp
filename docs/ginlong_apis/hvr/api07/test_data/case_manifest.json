@@ -1,0 +1,163 @@
+[
+  {
+    "id": "HVR07-01",
+    "title": "新增原材料",
+    "payload": "test_data/payloads/hvr07_01.json",
+    "curl": "test_data/curl/hvr07_01.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-02",
+    "title": "重复提交完全相同的 Add",
+    "payload": "test_data/payloads/hvr07_02.json",
+    "curl": "test_data/curl/hvr07_02.sh",
+    "auth_mode": "valid",
+    "additional_requests": [
+      {
+        "payload": "test_data/payloads/hvr07_02_changed.json",
+        "curl": "test_data/curl/hvr07_02_changed.sh",
+        "purpose": "同一 owner + productCode、不同 Payload 的重复 Add 也必须失败"
+      }
+    ]
+  },
+  {
+    "id": "HVR07-03",
+    "title": "相同 productCode 由第二货主创建变体",
+    "payload": "test_data/payloads/hvr07_03.json",
+    "curl": "test_data/curl/hvr07_03.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-04",
+    "title": "同码跨货主 productForm 冲突",
+    "payload": "test_data/payloads/hvr07_04.json",
+    "curl": "test_data/curl/hvr07_04.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-05",
+    "title": "半成品映射到 serial tracking",
+    "payload": "test_data/payloads/hvr07_05.json",
+    "curl": "test_data/curl/hvr07_05.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-06",
+    "title": "成品映射到 serial tracking",
+    "payload": "test_data/payloads/hvr07_06.json",
+    "curl": "test_data/curl/hvr07_06.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-07",
+    "title": "同一产品多次 Edit，修改名称和规格",
+    "payload": "test_data/payloads/hvr07_07.json",
+    "curl": "test_data/curl/hvr07_07.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-08",
+    "title": "Edit 修改单位和可选物料属性",
+    "payload": "test_data/payloads/hvr07_08.json",
+    "curl": "test_data/curl/hvr07_08.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-09",
+    "title": "相同 Payload 重复 Edit",
+    "payload": "test_data/payloads/hvr07_09.json",
+    "curl": "test_data/curl/hvr07_09.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-10",
+    "title": "不存在的单位导致失败",
+    "payload": "test_data/payloads/hvr07_10.json",
+    "curl": "test_data/curl/hvr07_10.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-11",
+    "title": "修正单位后使用同一业务键重试",
+    "payload": "test_data/payloads/hvr07_11.json",
+    "curl": "test_data/curl/hvr07_11.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-12",
+    "title": "拒绝不支持的 productForm 枚举",
+    "payload": "test_data/payloads/hvr07_12.json",
+    "curl": "test_data/curl/hvr07_12.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-13",
+    "title": "必填 owner 缺失",
+    "payload": "test_data/payloads/hvr07_13.json",
+    "curl": "test_data/curl/hvr07_13.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-14",
+    "title": "必填 owner 为 null",
+    "payload": "test_data/payloads/hvr07_14.json",
+    "curl": "test_data/curl/hvr07_14.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-15",
+    "title": "必填 productCode 为空字符串",
+    "payload": "test_data/payloads/hvr07_15.json",
+    "curl": "test_data/curl/hvr07_15.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-16",
+    "title": "必填 productName 为空白",
+    "payload": "test_data/payloads/hvr07_16.json",
+    "curl": "test_data/curl/hvr07_16.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-17",
+    "title": "必填 productForm 为 null",
+    "payload": "test_data/payloads/hvr07_17.json",
+    "curl": "test_data/curl/hvr07_17.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-18",
+    "title": "DECIMAL weight 使用非法文本",
+    "payload": "test_data/payloads/hvr07_18.json",
+    "curl": "test_data/curl/hvr07_18.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-19",
+    "title": "VARCHAR productName 使用数字类型",
+    "payload": "test_data/payloads/hvr07_19.json",
+    "curl": "test_data/curl/hvr07_19.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-20",
+    "title": "productForm 使用数字类型",
+    "payload": "test_data/payloads/hvr07_20.json",
+    "curl": "test_data/curl/hvr07_20.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR07-21",
+    "title": "无效 Bearer Token",
+    "payload": "test_data/payloads/hvr07_21.json",
+    "curl": "test_data/curl/hvr07_21.sh",
+    "auth_mode": "invalid_token"
+  },
+  {
+    "id": "HVR07-22",
+    "title": "Token 有效但 API User 未配置 WMS Project",
+    "payload": "test_data/payloads/hvr07_22.json",
+    "curl": "test_data/curl/hvr07_22.sh",
+    "auth_mode": "no_api_user"
+  }
+]

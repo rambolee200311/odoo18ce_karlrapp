@@ -44,9 +44,9 @@ class OutboundOrder(models.Model):
     owner = fields.Many2one('res.partner', string='Owner', related='project.owner', stored=True, tracking=True)
     warehouse = fields.Many2one('stock.warehouse', string='Warehouse', tracking=True,
                                 stored=True)
+    # 由出库订单选择实际作业类型，使本项目可选择 KRWH 的一步出库 Delivery Orders。
     pick_type = fields.Many2one('stock.picking.type', string='Picking Type',
-                                tracking=True, help='Picking type for this project', stored=True,
-                                domain=[('code', '=', 'internal')])
+                                tracking=True, help='Picking type for this project', stored=True)
     unload_company = fields.Many2one('res.partner', string='Unload Company/Recipient',required=True, tracking=True)
     remark = fields.Text(string='Remark')
     remark1 = fields.Text(string='Remark 1')

@@ -1,0 +1,71 @@
+[
+  {
+    "receivedAt": "2026-11-27T17:51:45+08:00",
+    "method": "POST",
+    "path": "/API/WMS_JSON/TPL_Stocktaking_Completed",
+    "contentType": "application/json",
+    "payload": {
+      "owner": "HVR-GIN005-OWNER",
+      "action": "Add",
+      "countOrderNo": "HVR-FINAL-20261127-COUNT-01",
+      "snList": [
+        {
+          "productSN": "HVRF27-FG-SN-002",
+          "quantity": 1.0,
+          "palletCode": "HVRF27-PALLET-001",
+          "productCode": "HVR-FINAL-20261127-FG",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:37:02"
+        },
+        {
+          "productSN": "HVRF27-SF-SN-001",
+          "quantity": 1.0,
+          "palletCode": "HVRF27-PALLET-001",
+          "productCode": "HVR-FINAL-20261127-SF",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:37:02"
+        },
+        {
+          "productSN": "HVRF27-SF-SN-002",
+          "quantity": 1.0,
+          "palletCode": "HVRF27-PALLET-003",
+          "productCode": "HVR-FINAL-20261127-SF",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:37:02"
+        },
+        {
+          "productSN": "HVRF27-FG-SN-004",
+          "quantity": 1.0,
+          "palletCode": "HVRF27-PALLET-003",
+          "productCode": "HVR-FINAL-20261127-FG",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:37:02"
+        },
+        {
+          "productSN": "HVR-FINAL-20261127-RAW",
+          "quantity": 5.0,
+          "palletCode": "HVRF27-PALLET-001",
+          "productCode": "HVR-FINAL-20261127-RAW",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:37:02"
+        },
+        {
+          "productSN": "HVR-FINAL-20261127-RAW",
+          "quantity": 3.0,
+          "palletCode": "HVRF27-PALLET-003",
+          "productCode": "HVR-FINAL-20261127-RAW",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:37:02"
+        }
+      ]
+    },
+    "accepted": true,
+    "validationErrors": [],
+    "httpStatus": 200,
+    "mockResponse": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK",
+      "operationTime": "2026-11-27 17:51:45"
+    }
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR-CC5-REAL-20261125-CC0B80-IN-001",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "CC-GIN-005 独立真实 HVR 入库预报",
+  "details": [
+    {
+      "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+      "productName": "CC-GIN-005 独立真实 HVR 成品",
+      "specificationModel": "HVR-CC5-REAL-SN-MODEL-001",
+      "quantity": 2
+    }
+  ]
+}

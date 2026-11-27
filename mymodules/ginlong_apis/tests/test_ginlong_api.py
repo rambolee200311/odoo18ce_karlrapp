@@ -5,6 +5,7 @@ import http.client
 import socket
 import threading
 import time
+import traceback
 import uuid
 from copy import deepcopy
 from datetime import timedelta
@@ -519,13 +520,14 @@ class TestGinlongAPI(TransactionCase):
             }],
         }
 
-    def _create_actual_picking(self, order, incoming, suffix):
+    def _create_actual_picking(self, order, incoming, suffix, done=False):
         """为回传测试建立关联 Order 的实际作业行、SN、托盘和 Picking。
 
         参数：
             order: 对应入库或出库 WorldDepot Order。
             incoming: True 建立入库 Picking，False 建立出库 Picking。
             suffix: 用于隔离夹具编码的唯一后缀。
+            done: 为 True 时走 Odoo 标准验证入口完成作业。
 
         返回：
             新建 Picking 与其产品变体。
@@ -535,7 +537,7 @@ class TestGinlongAPI(TransactionCase):
             "default_code": "GINLONG-CB-%s" % suffix,
             "ginlong_product_code": "GINLONG-CB-%s" % suffix,
             "type": "consu",
-            "tracking": "serial",
+            "tracking": "lot",
         })
         picking_type = self.warehouse.in_type_id if incoming else self.warehouse.out_type_id
         picking = self.env["stock.picking"].create({
@@ -570,8 +572,15 @@ class TestGinlongAPI(TransactionCase):
             "lot_id": lot.id,
             "result_package_id": package.id,
         })
+        if done:
+            # 通过 WMS 同一标准确认入口生成 done/date_done 与实际确认人。
+            picking.action_confirm()
+            picking.move_ids.picked = True
+            picking.button_validate()
+            self.assertEqual(picking.state, "done")
+            if incoming:
+                self.assertEqual(picking.ginlong_actual_inbound_operator_id, self.env.user)
         return picking, product
-
     def test_api01_maps_order_pallet_product_and_serial_without_execution(self):
         """验证 API01 映射入库单、托盘、产品及 SN，且不创建实际执行记录。"""
         result = services.api01(self.env, self.api_user, self._api01())
@@ -604,21 +613,80 @@ class TestGinlongAPI(TransactionCase):
         self.assertFalse(order.stock_picking_id)
         self.assertFalse(self.env["stock.picking"].search([("inbound_order_id", "=", order.id)]))
 
-        services.api01(self.env, self.api_user, {
+        delete_payload = {
             "owner": "OWNER-01", "action": "Del", "inboundOrderNo": order.reference,
             "warehouse": "WH-01", "businessType": "STANDARD",
-        })
+        }
+        services.api01(self.env, self.api_user, delete_payload)
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
         self.assertEqual(len(order.inbound_order_product_ids), 1)
         self.assertEqual(len(order.inbound_order_product_ids.product_serial_number_ids), 12)
-        services.api01(self.env, self.api_user, {
-            "owner": "OWNER-01", "action": "Del", "inboundOrderNo": order.reference,
-            "warehouse": "WH-01", "businessType": "STANDARD",
-        })
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as repeated_delete:
+            services.api01(self.env, self.api_user, delete_payload)
+        self.assertEqual(repeated_delete.exception.error_code, "BUS01")
+        self.assertEqual(repeated_delete.exception.public_message, "有效订单不存在或已取消")
+
+        # API01 的本地兼容 Edit 也只能修改有效单据；取消后的历史单据不可复活。
+        with self.assertRaises(ValidationError):
+            services.api01(self.env, self.api_user, dict(self._api01(order.reference), action="Edit"))
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
         self.assertEqual(len(order.inbound_order_product_ids), 1)
+
+    def test_inbound_confirmation_and_picking_allow_missing_container_no(self):
+        """验证缺少 Container No 时仍可确认订单并创建实际收货 Picking。"""
+        product_code = "GINLONG-IN-NO-CONTAINER-PRODUCT"
+        product = self.env["product.product"].create({
+            "name": "Ginlong inbound product without container number",
+            "default_code": ginlong_internal_code("OWNER-01", product_code),
+            "ginlong_owner_code": "OWNER-01",
+            "ginlong_product_code": product_code,
+            "type": "consu",
+            "tracking": "lot",
+        })
+        payload = self._api01("GINLONG-IN-NO-CONTAINER")
+        payload["businessType"] = "STANDARD"
+        payload.pop("snList")
+        payload["details"] = [{
+            "productCode": product_code,
+            "productName": product.name,
+            "specificationModel": "NO-CONTAINER-MODEL",
+            "quantity": 2,
+        }]
+
+        result = services.api01(self.env, self.api_user, payload)
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        self.assertFalse(order.cntr_no)
+        order.write({
+            "a_date": fields.Date.from_string("2026-11-25"),
+            "pick_type": self.warehouse.in_type_id.id,
+        })
+
+        order.action_confirm()
+        self.assertEqual(order.state, "confirm")
+        self.assertFalse(order.cntr_no)
+
+        order.action_create_stock_picking()
+        picking = self.env["stock.picking"].search([
+            ("inbound_order_id", "=", order.id),
+            ("state", "!=", "cancel"),
+        ], limit=1)
+        self.assertTrue(picking)
+        self.assertFalse(picking.cntrno)
+        self.assertNotEqual(picking.state, "done")
+
+        package_name = "%s-0001" % order.reference
+        package = self.env["stock.quant.package"].search([("name", "=", package_name)])
+        self.assertTrue(package, "缺少 Container No 时托盘名称应使用订单编号保持可追溯")
+        lot_name = "202611-%s-0001" % order.reference
+        lot = self.env["stock.lot"].search([
+            ("name", "=", lot_name),
+            ("product_id", "=", product.id),
+        ])
+        self.assertTrue(lot, "缺少 Container No 时批次名称应使用订单编号保持可追溯")
+        self.assertEqual(picking.move_line_ids.mapped("lot_id"), lot)
+        self.assertEqual(sum(picking.move_line_ids.mapped("quantity")), 2)
 
     def test_api01_creates_owner_by_code_and_reuses_it_for_later_orders(self):
         """验证 API01 按货主编码自动建档并在后续订单中复用。"""
@@ -696,17 +764,18 @@ class TestGinlongAPI(TransactionCase):
         self.assertFalse(order.picking_Out)
         self.assertFalse(self.env["stock.picking"].search([("outbound_order_id", "=", order.id)]))
 
-        services.api03(self.env, self.api_user, {
+        delete_payload = {
             "owner": "OWNER-01", "action": "Del", "outboundOrderNo": order.reference,
             "warehouse": "WH-01", "businessType": "STANDARD",
-        })
+        }
+        services.api03(self.env, self.api_user, delete_payload)
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
         self.assertEqual(len(order.outbound_order_product_ids), 1)
-        services.api03(self.env, self.api_user, {
-            "owner": "OWNER-01", "action": "Del", "outboundOrderNo": order.reference,
-            "warehouse": "WH-01", "businessType": "STANDARD",
-        })
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as repeated_delete:
+            services.api03(self.env, self.api_user, delete_payload)
+        self.assertEqual(repeated_delete.exception.error_code, "BUS01")
+        self.assertEqual(repeated_delete.exception.public_message, "有效订单不存在或已取消")
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
         self.assertEqual(len(order.outbound_order_product_ids), 1)
@@ -805,7 +874,7 @@ class TestGinlongAPI(TransactionCase):
             response = endpoint.api03()
 
         response_body = json.loads(response.get_data(as_text=True))
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(set(response_body), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(response_body["returnStatus"], "N")
         self.assertTrue(response_body["exceptionInfo"].startswith("BUS01: "))
@@ -873,16 +942,18 @@ class TestGinlongAPI(TransactionCase):
         self.assertFalse(actual.ginlong_callback_selected)
         self.assertNotIn(actual.serial_number, {row["productSN"] for row in task.get_plan_sn_list()})
 
-        services.api05(self.env, self.api_user, {
+        delete_payload = {
             "owner": "OWNER-01", "action": "Del", "countOrderNo": "COUNT-001", "warehouse": "WH-01",
-        })
+        }
+        services.api05(self.env, self.api_user, delete_payload)
         self.assertTrue(task.exists())
         self.assertEqual(task.state, "cancel")
         self.assertEqual(task.get_plan_details()[0]["productName"], "Ginlong module name")
         self.assertTrue(actual.exists())
-        services.api05(self.env, self.api_user, {
-            "owner": "OWNER-01", "action": "Del", "countOrderNo": "COUNT-001", "warehouse": "WH-01",
-        })
+        with self.assertRaises(ginlong_errors.GinlongAPIError) as repeated_delete:
+            services.api05(self.env, self.api_user, delete_payload)
+        self.assertEqual(repeated_delete.exception.error_code, "BUS01")
+        self.assertEqual(repeated_delete.exception.public_message, "有效订单不存在或已取消")
         self.assertTrue(task.exists())
         self.assertEqual(task.state, "cancel")
 
@@ -1361,10 +1432,15 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(detail.receipt_status, "Y")
 
     def test_api08_shipment_details_persist_actual_outbound_data(self):
-        """验证 API08 发货明细持久化关联实际出库数据。"""
+        """验证 API08 接受出库单通过 picking_Out 关联的实际发货作业行。"""
         result = services.api03(self.env, self.api_user, self._api03("GINLONG-SHIPMENT-DETAIL"))
         order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
-        picking, product = self._create_actual_picking(order, incoming=False, suffix="SHIPMENT-DETAIL")
+        picking, product = self._create_actual_picking(
+            order, incoming=False, suffix="SHIPMENT-DETAIL", done=True,
+        )
+        # 实际 WMS 出库单通过 picking_Out 关联出库单；不依赖 Picking 反向字段。
+        picking.outbound_order_id = False
+        order.write({"picking_Out": picking.id, "status": "outbound"})
         line = picking.move_line_ids
         detail = self.env["ginlong.outbound.shipment.detail"].create({
             "order_id": order.id,
@@ -1382,13 +1458,86 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(detail.package_id, line.result_package_id)
         self.assertEqual(detail.shipment_status, "Y")
 
+    def test_api08_rejects_outgoing_picking_before_done(self):
+        """验证没有 Done/outgoing Picking 时 API08 不改订单状态也不发送 HTTP。"""
+        result = services.api03(self.env, self.api_user, self._api03("GINLONG-SHIPMENT-NOT-DONE"))
+        order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
+        picking, _product = self._create_actual_picking(
+            order, incoming=False, suffix="SHIPMENT-NOT-DONE", done=False,
+        )
+        self.assertNotEqual(picking.state, "done")
+        endpoint = "http://mock.invalid/API/WMS_JSON/TPL_Shipment_Completed/not-done-%s" % order.id
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api08_callback_url", endpoint)
+        original_lifecycle_state = order.state
+        with patch("odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post") as send:
+            result = order.action_ginlong_api08()
+
+        self.assertEqual(send.call_count, 0)
+        self.assertEqual(order.status, "planning")
+        self.assertEqual(order.state, original_lifecycle_state)
+        self.assertEqual(result["params"]["type"], "danger")
+        self.assertIn("outgoing Picking", result["params"]["message"])
+        log = self.env["world.depot.api.log"].search(
+            [("request_path", "=", endpoint)], order="id desc", limit=1,
+        )
+        self.assertTrue(log)
+        self.assertFalse(log.success)
+        self.assertIn("outgoing Picking", log.exception_details)
+
+    def test_api08_rejects_internal_preparation_move_line(self):
+        """验证 API08 不接受内部备货行冒充实际 Outgoing 发货作业行。"""
+        result = services.api03(self.env, self.api_user, self._api03("GINLONG-SHIPMENT-INTERNAL"))
+        order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
+        internal_type = self.env["stock.picking.type"].search([
+            ("warehouse_id", "=", self.warehouse.id), ("code", "=", "internal"),
+        ], limit=1)
+        self.assertTrue(internal_type)
+        internal_picking = self.env["stock.picking"].create({
+            "picking_type_id": internal_type.id,
+            "location_id": internal_type.default_location_src_id.id,
+            "location_dest_id": internal_type.default_location_dest_id.id,
+            "outbound_order_id": order.id,
+        })
+        move = self.env["stock.move"].create({
+            "name": "Internal preparation line",
+            "product_id": self.product.id,
+            "product_uom_qty": 1,
+            "product_uom": self.product.uom_id.id,
+            "picking_id": internal_picking.id,
+            "location_id": internal_picking.location_id.id,
+            "location_dest_id": internal_picking.location_dest_id.id,
+        })
+        line = self.env["stock.move.line"].create({
+            "picking_id": internal_picking.id,
+            "move_id": move.id,
+            "product_id": self.product.id,
+            "product_uom_id": self.product.uom_id.id,
+            "location_id": internal_picking.location_id.id,
+            "location_dest_id": internal_picking.location_dest_id.id,
+            "quantity": 1,
+        })
+        existing_detail_ids = set(order.ginlong_shipment_detail_ids.ids)
+        with self.assertRaisesRegex(ValidationError, "实际出库作业行"):
+            # 与真实 HTTP 请求事务一致，异常后回滚本次 ORM 创建的临时行。
+            with self.env.cr.savepoint():
+                self.env["ginlong.outbound.shipment.detail"].create({
+                    "order_id": order.id,
+                    "move_line_id": line.id,
+                    "shipment_status": "Y",
+                })
+        # 订单夹具可能已有其他合法明细；只断言非法操作回滚后没有新行。
+        order.invalidate_recordset(["ginlong_shipment_detail_ids"])
+        self.assertEqual(set(order.ginlong_shipment_detail_ids.ids), existing_detail_ids)
+
     def test_api06_uses_saved_actual_preparation_for_totals(self):
         """验证 API06 汇总值来自已保存的实际备货数据及人工覆盖值。"""
         self.assertEqual(ginlong_callbacks._decimal_string(12.34), "12.34")
         self.assertEqual(ginlong_callbacks._decimal_string(1.1234567), "1.123457")
         result = services.api03(self.env, self.api_user, self._api03("GINLONG-API06-TOTALS"))
         order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
-        picking, product = self._create_actual_picking(order, incoming=False, suffix="API06-TOTALS")
+        picking, product = self._create_actual_picking(
+            order, incoming=False, suffix="API06-TOTALS", done=True,
+        )
         product.product_tmpl_id.write({"weight": 1.5, "ginlong_weight": 2.5})
         line = picking.move_line_ids
         source_package = self.env["stock.quant.package"].create({"name": "API06-SOURCE-PALLET"})
@@ -1399,7 +1548,6 @@ class TestGinlongAPI(TransactionCase):
             "ginlong_operator_code": "picker-1",
             "ginlong_operation_time": fields.Datetime.now(),
         })
-        picking.ginlong_callback_selected = True
         self.assertEqual(order.ginlong_pallet_qty_auto, 1)
         self.assertEqual(order.ginlong_pallet_qty, 1)
         self.assertEqual(order.ginlong_total_net_weight, 5)
@@ -1497,9 +1645,10 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(task.remark, "updated")
         self.assertEqual(task.get_plan_details()[0]["productName"], "Before")
 
-    def test_callback_forms_are_persistent_and_have_no_transient_wizard(self):
-        """验证五个回传入口使用持久化表单字段而非临时 Wizard。"""
+    def test_callback_forms_are_persistent_and_use_only_generic_confirmation_wizard(self):
+        """验证业务回传数据持久化，重复确认只使用通用临时向导。"""
         self.assertNotIn("ginlong.api.callback.wizard", self.env.registry.models)
+        self.assertIn("ginlong.api.callback.confirmation", self.env.registry.models)
         inbound_view = self.env.ref("ginlong_apis.view_inbound_order_form_ginlong_callbacks")
         outbound_view = self.env.ref("ginlong_apis.view_outbound_order_form_ginlong_callbacks")
         picking_view = self.env.ref("ginlong_apis.view_stock_picking_form_ginlong_callbacks")
@@ -1508,20 +1657,22 @@ class TestGinlongAPI(TransactionCase):
             self.assertIn("Ginlong 回传数据", view.arch_db)
         self.assertIn("action_ginlong_api04", inbound_view.arch_db)
         self.assertIn("action_ginlong_api10", count_view.arch_db)
-        self.assertIn("ginlong_callback_selected", inbound_view.arch_db)
-        self.assertIn("ginlong_receipt_detail_ids", inbound_view.arch_db)
-        self.assertIn("ginlong_shipment_detail_ids", outbound_view.arch_db)
+        self.assertNotIn("ginlong_callback_selected", inbound_view.arch_db)
+        self.assertNotIn("ginlong_receipt_detail_ids", inbound_view.arch_db)
+        self.assertIn("ginlong_api02_last_success", inbound_view.arch_db)
+        self.assertIn("ginlong_api04_last_error", inbound_view.arch_db)
+        self.assertNotIn("ginlong_shipment_detail_ids", outbound_view.arch_db)
+        self.assertIn("确认离仓并回传锦浪", outbound_view.arch_db)
         self.assertIn("ginlong_pallet_qty_manual", outbound_view.arch_db)
-
-    def test_api02_uses_saved_receipt_details_and_logs_each_retry(self):
-        """验证 API02 从已保存收货明细生成报文，并为每次重试追加日志。"""
+        self.assertNotIn("ginlong_callback_selected", outbound_view.arch_db)
+    def test_api02_uses_order_status_and_logs_retry_without_picking(self):
+        """验证 API02 读取业务 status，不要求 Picking/收货子表且不改变 lifecycle state。"""
         result = services.api01(self.env, self.api_user, self._api01("GINLONG-CALLBACK-API02"))
         order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
-        picking, _product = self._create_actual_picking(order, incoming=True, suffix="API02-PAYLOAD")
-        detail = self.env["ginlong.inbound.receipt.detail"].create({
-            "order_id": order.id, "move_line_id": picking.move_line_ids.id, "receipt_status": "Y",
-        })
-        endpoint = "http://mock.invalid/API/WMS_JSON/api02-%s" % order.id
+        initial_state = order.state
+        self.assertFalse(order.ginlong_stock_picking_ids)
+        self.assertFalse(order.ginlong_receipt_detail_ids)
+        endpoint = "http://mock.invalid/API/WMS_JSON/TPL_Receipt_Confirmation/%s" % order.id
         self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
         failed_response = SimpleNamespace(
             status_code=500, text='{"returnStatus":"N","exceptionInfo":"retry"}',
@@ -1537,17 +1688,17 @@ class TestGinlongAPI(TransactionCase):
         ) as send:
             failed_action = order.action_ginlong_api02()
             self.assertEqual(failed_action["params"]["type"], "danger")
-            detail.receipt_status = "N"
-            self.env.flush_all()
-            self.env.invalidate_all()
-            order = self.env["world.depot.inbound.order"].browse(order.id)
-            detail = self.env["ginlong.inbound.receipt.detail"].browse(detail.id)
+            order.action_mark_arrived()
+            self.assertEqual(order.state, initial_state)
+            self.assertEqual(order.status, "arrive")
             action = order.action_ginlong_api02()
         self.assertEqual(send.call_count, 2)
-        self.assertEqual(send.call_args_list[0].kwargs["json"]["receiptConfirmed"], "Y")
-        self.assertEqual(send.call_args_list[1].kwargs["json"]["receiptConfirmed"], "N")
-        self.assertEqual(send.call_args_list[0].kwargs["json"]["action"], "UPDATE")
-        self.assertEqual(send.call_args_list[1].kwargs["json"]["action"], "UPDATE")
+        self.assertEqual(send.call_args_list[0].kwargs["json"], {
+            "inboundOrderNo": order.reference, "action": "UPDATE", "receiptConfirmed": "N",
+        })
+        self.assertEqual(send.call_args_list[1].kwargs["json"], {
+            "inboundOrderNo": order.reference, "action": "UPDATE", "receiptConfirmed": "Y",
+        })
         self.assertEqual(action["tag"], "display_notification")
         logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
         self.assertEqual(len(logs), 2)
@@ -1555,62 +1706,84 @@ class TestGinlongAPI(TransactionCase):
         self.assertTrue(logs[1].success)
         self.assertEqual(logs[0].source_record, order)
         self.assertEqual(logs[1].source_record, order)
-        self.assertIn('"receiptConfirmed": "Y"', logs[0].request_data)
-        self.assertIn('"receiptConfirmed": "N"', logs[1].request_data)
+        self.assertIn('"receiptConfirmed": "N"', logs[0].request_data)
+        self.assertIn('"receiptConfirmed": "Y"', logs[1].request_data)
+        receipt_messages = order.message_ids.filtered(
+            lambda message: "收货确认状态已记录：" in (message.body or "")
+        )
+        self.assertTrue(receipt_messages)
+        self.assertIn("planning", receipt_messages[-1].body)
+        self.assertIn("arrive", receipt_messages[-1].body)
 
-    def test_api02_and_api08_block_mixed_saved_detail_statuses(self):
-        """验证 API02 和 API08 在明细状态混合时阻止生成订单级结果。"""
+    def test_api02_status_mapping_preserves_order_lifecycle(self):
+        """验证三个现有收货状态的 API02 映射，并确认生命周期 state 不变。"""
+        result = services.api01(self.env, self.api_user, self._api01("GINLONG-CALLBACK-API02-MAPPING"))
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        original_state = order.state
+        for status, expected in (("planning", "N"), ("arrive", "Y"), ("inbound", "Y")):
+            order.write({"status": status})
+            self.assertEqual(ginlong_callbacks._api02_payload(order)["receiptConfirmed"], expected)
+            self.assertEqual(order.state, original_state)
+
+    def test_api02_reads_order_status_and_api08_confirms_done_outbound_order(self):
+        """验证 API02 只读业务状态；API08 以 Done/outgoing Picking 确认订单状态并回传。"""
         inbound_result = services.api01(
             self.env, self.api_user, self._api01("GINLONG-CALLBACK-API02-MIXED")
         )
         inbound = self.env["world.depot.inbound.order"].browse(inbound_result["data"]["id"])
-        in_pick_1, _in_product_1 = self._create_actual_picking(
-            inbound, incoming=True, suffix="API02-MIXED-1"
+        in_pick, _in_product = self._create_actual_picking(
+            inbound, incoming=True, suffix="API02-OLD-DETAIL"
         )
-        in_pick_2, _in_product_2 = self._create_actual_picking(
-            inbound, incoming=True, suffix="API02-MIXED-2"
-        )
-        self.env["ginlong.inbound.receipt.detail"].create([
-            {"order_id": inbound.id, "move_line_id": in_pick_1.move_line_ids.id, "receipt_status": "Y"},
-            {"order_id": inbound.id, "move_line_id": in_pick_2.move_line_ids.id, "receipt_status": "N"},
-        ])
+        self.env["ginlong.inbound.receipt.detail"].create({
+            "order_id": inbound.id, "move_line_id": in_pick.move_line_ids.id, "receipt_status": "Y",
+        })
 
         outbound_result = services.api03(
             self.env, self.api_user, self._api03("GINLONG-CALLBACK-API08-MIXED")
         )
         outbound = self.env["world.depot.outbound.order"].browse(outbound_result["data"]["id"])
-        out_pick_1, _out_product_1 = self._create_actual_picking(
-            outbound, incoming=False, suffix="API08-MIXED-1"
+        out_pick, _out_product = self._create_actual_picking(
+            outbound, incoming=False, suffix="API08-DONE", done=True,
         )
-        out_pick_2, _out_product_2 = self._create_actual_picking(
-            outbound, incoming=False, suffix="API08-MIXED-2"
-        )
-        self.env["ginlong.outbound.shipment.detail"].create([
-            {"order_id": outbound.id, "move_line_id": out_pick_1.move_line_ids.id, "shipment_status": "Y"},
-            {"order_id": outbound.id, "move_line_id": out_pick_2.move_line_ids.id, "shipment_status": "N"},
-        ])
+        self.assertEqual(out_pick.state, "done")
+        self.assertFalse(outbound.ginlong_shipment_detail_ids)
+        original_lifecycle_state = outbound.state
 
-        inbound_endpoint = "http://mock.invalid/API/WMS_JSON/api02-mixed"
-        outbound_endpoint = "http://mock.invalid/API/WMS_JSON/api08-mixed"
+        inbound_endpoint = "http://mock.invalid/API/WMS_JSON/TPL_Receipt_Confirmation/mixed"
+        outbound_endpoint = "http://mock.invalid/API/WMS_JSON/TPL_Shipment_Completed/mixed"
         params = self.env["ir.config_parameter"].sudo()
         params.set_param("ginlong_apis.api02_callback_url", inbound_endpoint)
         params.set_param("ginlong_apis.api08_callback_url", outbound_endpoint)
+        good_response = SimpleNamespace(
+            status_code=200, text='{"returnStatus":"Y","exceptionInfo":"OK","operationTime":"2026-06-01 14:30:25"}',
+            json=lambda: {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-06-01 14:30:25"},
+        )
         with patch(
-            "odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post"
+            "odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post", return_value=good_response
         ) as send:
             inbound_result = inbound.action_ginlong_api02()
             outbound_result = outbound.action_ginlong_api08()
 
-        self.assertEqual(send.call_count, 0)
-        self.assertEqual(inbound_result["params"]["type"], "danger")
-        self.assertEqual(outbound_result["params"]["type"], "danger")
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(send.call_args_list[0].kwargs["json"]["receiptConfirmed"], "N")
+        self.assertEqual(send.call_args_list[1].kwargs["json"], {
+            "outboundOrderNo": outbound.reference,
+            "action": "CREATE",
+            "shipmentConfirmed": "Y",
+        })
+        self.assertEqual(inbound_result["params"]["type"], "success")
+        self.assertEqual(outbound_result["params"]["type"], "success")
+        self.assertEqual(outbound.status, "outbound")
+        self.assertEqual(outbound.state, original_lifecycle_state)
         logs = self.env["world.depot.api.log"].search([
             ("request_path", "in", [inbound_endpoint, outbound_endpoint]),
         ])
         self.assertEqual(len(logs), 2)
-        self.assertTrue(all(not log.success for log in logs))
-        self.assertTrue(all("状态不一致" in log.exception_details for log in logs))
-
+        self.assertTrue(logs.filtered(lambda log: log.request_path == inbound_endpoint).success)
+        self.assertTrue(logs.filtered(lambda log: log.request_path == outbound_endpoint).success)
+        self.assertIn('"shipmentConfirmed": "Y"', logs.filtered(
+            lambda log: log.request_path == outbound_endpoint
+        ).request_data)
     def test_callback_forms_expose_existing_order_and_picking_sources(self):
         """验证回传表单暴露已有 Order 和 Picking 数据来源。"""
         inbound_result = services.api01(
@@ -1664,7 +1837,9 @@ class TestGinlongAPI(TransactionCase):
         params = self.env["ir.config_parameter"].sudo()
         params.set_param("ginlong_apis.api06_callback_url", endpoint_06)
         params.set_param("ginlong_apis.api08_callback_url", endpoint_08)
-        picking, product = self._create_actual_picking(order, incoming=False, suffix="API06-08-PAYLOAD")
+        picking, product = self._create_actual_picking(
+            order, incoming=False, suffix="API06-08-PAYLOAD", done=True,
+        )
         product.product_tmpl_id.ginlong_weight = 1.25
         line = picking.move_line_ids
         line.write({
@@ -1672,10 +1847,8 @@ class TestGinlongAPI(TransactionCase):
             "ginlong_operator_code": "picker-08",
             "ginlong_operation_time": fields.Datetime.now(),
         })
-        picking.ginlong_callback_selected = True
-        self.env["ginlong.outbound.shipment.detail"].create({
-            "order_id": order.id, "move_line_id": line.id, "shipment_status": "N",
-        })
+        self.assertFalse(order.ginlong_shipment_detail_ids)
+        original_lifecycle_state = order.state
         response = SimpleNamespace(
             status_code=200, text='{"returnStatus":"Y","exceptionInfo":"OK","operationTime":"2026-06-01 14:30:25"}',
             json=lambda: {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-06-01 14:30:25"},
@@ -1685,6 +1858,7 @@ class TestGinlongAPI(TransactionCase):
             return_value=response,
         ) as send:
             order.action_ginlong_api06()
+            self.assertEqual(order.status, "planning")
             order.action_ginlong_api08()
 
         self.assertEqual(send.call_count, 2)
@@ -1694,122 +1868,990 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(send.call_args_list[1].kwargs["json"], {
             "outboundOrderNo": order.reference,
             "action": "CREATE",
-            "shipmentConfirmed": "N",
+            "shipmentConfirmed": "Y",
         })
+        self.assertEqual(order.status, "outbound")
+        self.assertEqual(order.state, original_lifecycle_state)
         log_06 = self.env["world.depot.api.log"].search([("request_path", "=", endpoint_06)], order="id desc", limit=1)
         log_08 = self.env["world.depot.api.log"].search([("request_path", "=", endpoint_08)], order="id desc", limit=1)
         self.assertTrue(log_06 and log_08)
         self.assertTrue(log_06.success)
         self.assertTrue(log_08.success)
-        self.assertIn('"shipmentConfirmed": "N"', log_08.request_data)
+        self.assertIn('"shipmentConfirmed": "Y"', log_08.request_data)
 
-    def test_api04_sends_saved_move_line_data_and_logs_response(self):
-        """验证 API04 从已保存 move line 取数并记录响应。"""
-        result = services.api01(self.env, self.api_user, self._api01("GINLONG-CALLBACK-API04"))
-        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
-        picking, product = self._create_actual_picking(order, incoming=True, suffix="API04-SAVED")
-        picking.ginlong_callback_selected = True
-        self._create_actual_picking(order, incoming=True, suffix="API04-UNSELECTED")
-        line = picking.move_line_ids
-        operation_time = fields.Datetime.now()
-        line.write({
-            "ginlong_operator_code": "actual.worker",
-            "ginlong_operation_time": operation_time,
+    def test_api06_uses_linked_done_picking_without_manual_selection(self):
+        """真实 HTTP 验证 API06 自动读取订单关联的 Done/outgoing Picking。"""
+        result = services.api03(
+            self.env, self.api_user, self._api03("GINLONG-CALLBACK-API06-AUTO-%s" % uuid.uuid4().hex[:8]),
+        )
+        order = self.env["world.depot.outbound.order"].browse(result["data"]["id"])
+        receiver = _LocalGinlongReceiver()
+        endpoint = receiver.url + "/API06"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api06_callback_url", endpoint)
+        try:
+            picking, product = self._create_actual_picking(
+                order, incoming=False, suffix="API06-AUTO", done=False,
+            )
+            product.product_tmpl_id.ginlong_weight = 1.25
+            line = picking.move_line_ids
+            package = line.result_package_id
+            line.write({
+                "package_id": package.id,
+                "ginlong_operator_code": "picker.auto.01",
+                "ginlong_operation_time": fields.Datetime.now(),
+            })
+
+            # 混合实际 Picking 同时包含有 lot 的 SN 产品和无 lot 的非 SN 原材料。
+            raw_product = self.env["product.product"].create({
+                "name": "Actual non-serial API06 product",
+                "default_code": "GINLONG-CB-API06-RAW",
+                "ginlong_product_code": "GINLONG-CB-API06-RAW",
+                "type": "consu",
+                "tracking": "none",
+            })
+            raw_product.product_tmpl_id.ginlong_weight = 0.5
+            raw_move = self.env["stock.move"].create({
+                "name": "Actual non-serial API06 move",
+                "product_id": raw_product.id,
+                "product_uom_qty": 3,
+                "product_uom": raw_product.uom_id.id,
+                "picking_id": picking.id,
+                "location_id": picking.location_id.id,
+                "location_dest_id": picking.location_dest_id.id,
+            })
+            raw_line = self.env["stock.move.line"].create({
+                "picking_id": picking.id,
+                "move_id": raw_move.id,
+                "product_id": raw_product.id,
+                "product_uom_id": raw_product.uom_id.id,
+                "location_id": picking.location_id.id,
+                "location_dest_id": picking.location_dest_id.id,
+                "quantity": 3,
+                "package_id": package.id,
+                "ginlong_operator_code": "picker.auto.01",
+                "ginlong_operation_time": fields.Datetime.now(),
+            })
+            picking.action_confirm()
+            picking.move_ids.picked = True
+            picking.button_validate()
+            self.assertFalse(picking.ginlong_callback_selected)
+            self.assertEqual(ginlong_callbacks._api06_pickings(order), picking)
+            self.assertEqual(order.ginlong_pallet_qty_auto, 1)
+            self.assertEqual(order.ginlong_total_net_weight, 4.0)
+
+            payload = ginlong_callbacks._api06_payload(order)
+            self.assertEqual(payload["palletQty"], "1")
+            self.assertEqual(payload["totalWeight"], "4")
+            self.assertEqual(len(payload["snList"]), 2)
+            self.assertEqual(payload["snList"][0]["operator"], "picker.auto.01")
+            self.assertEqual(payload["snList"][0]["palletCode"], line.package_id.name)
+            self.assertEqual(payload["snList"][1]["productCode"], raw_product.ginlong_product_code)
+            self.assertEqual(payload["snList"][1]["productSN"], raw_product.ginlong_product_code)
+            self.assertEqual(payload["snList"][1]["quantity"], 3)
+            action = order.action_ginlong_api06()
+            self.assertEqual(action["params"]["type"], "success")
+            self.assertEqual(len(receiver.records), 1)
+            self.assertEqual(receiver.records[0]["body"], payload)
+            self.assertEqual(receiver.records[0]["headers"].get("Content-Type"), "application/json")
+
+            logs = self.env["world.depot.api.log"].search([
+                ("request_path", "=", endpoint),
+            ], order="id")
+            self.assertEqual(len(logs), 1)
+            self.assertTrue(logs.success)
+            self.assertEqual(logs.source_record, order)
+            self.assertTrue(logs.ginlong_idempotency_id)
+            repeat = order.action_ginlong_api06()
+            self.assertEqual(repeat["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(len(receiver.records), 1, "提示重复回传前不能实际发送第二个 HTTP")
+            self.assertEqual(self.env["world.depot.api.log"].search_count([
+                ("request_path", "=", endpoint),
+            ]), 1)
+        finally:
+            receiver.close()
+
+    def test_cc005_stock_operator_can_create_and_update_ginlong_orders(self):
+        """验证普通库存用户可操作入库、出库订单及明细，且不需要系统管理员权限。"""
+        operator = self.env["res.users"].with_context(no_reset_password=True).create({
+            "name": "Ginlong stock operator test",
+            "login": "ginlong-operator-%s" % uuid.uuid4().hex,
+            "password": "local-test-password-123",
+            "groups_id": [(6, 0, [
+                self.env.ref("base.group_user").id,
+                self.env.ref("ginlong_apis.group_ginlong_hvr_operator").id,
+            ])],
         })
-        self.env.flush_all()
-        self.env.invalidate_all()
-        order = self.env["world.depot.inbound.order"].browse(order.id)
-        picking = self.env["stock.picking"].browse(picking.id)
-        line = picking.move_line_ids
-        self.assertEqual(line.ginlong_operator_code, "actual.worker")
-        self.assertEqual(line.ginlong_operation_time, operation_time)
-        self.assertTrue(picking.ginlong_callback_selected)
+        self.assertTrue(operator.has_group("stock.group_stock_user"))
+        self.assertFalse(operator.has_group("base.group_system"))
+        operator.partner_id.write({"source_project_id": self.project.id})
+        self.project.write({"allowed_user_ids": [(4, operator.id)]})
 
-        endpoint = "http://mock.invalid/API/WMS_JSON/api04-%s" % order.id
-        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
+        inbound = self.env["world.depot.inbound.order"].with_user(operator).create({
+            "project": self.project.id,
+            "reference": "GINLONG-OP-IN-%s" % uuid.uuid4().hex,
+            "warehouse": self.warehouse.id,
+        })
+        inbound.with_user(operator).write({"remark": "operator inbound update"})
+        inbound_line = self.env["world.depot.inbound.order.product"].with_user(operator).create({
+            "inbound_order_id": inbound.id,
+            "product_id": self.product.id,
+            "pallets": 1,
+        })
+        self.assertEqual(inbound.with_user(operator).remark, "operator inbound update")
+        self.assertEqual(inbound_line.with_user(operator).inbound_order_id, inbound)
+
+        foreign_project = self.env["project.project"].create({
+            "name": "Ginlong operator isolation test %s" % uuid.uuid4().hex,
+            "owner": self.owner.id,
+            "category": self.env.ref("product.product_category_all").id,
+            "warehouse": self.warehouse.id,
+            "is_check_origin_doc": False,
+        })
+        foreign_inbound = self.env["world.depot.inbound.order"].create({
+            "project": foreign_project.id,
+            "reference": "GINLONG-FOREIGN-IN-%s" % uuid.uuid4().hex,
+            "warehouse": self.warehouse.id,
+        })
+        self.assertFalse(
+            self.env["world.depot.inbound.order"].with_user(operator).search([
+                ("id", "=", foreign_inbound.id),
+            ]),
+            "项目范围规则不得向操作员暴露其他项目的订单",
+        )
+
+        outbound = self.env["world.depot.outbound.order"].with_user(operator).create({
+            "project": self.project.id,
+            "unload_company": self.recipient.id,
+            "reference": "GINLONG-OP-OUT-%s" % uuid.uuid4().hex,
+            "warehouse": self.warehouse.id,
+        })
+        outbound.with_user(operator).write({"remark": "operator outbound update"})
+        outbound_line = self.env["world.depot.outbound.order.product"].with_user(operator).create({
+            "outbound_order_id": outbound.id,
+            "product_id": self.product.id,
+            "pallets": 1,
+            "quantity": 1,
+        })
+        self.assertEqual(outbound.with_user(operator).remark, "operator outbound update")
+        self.assertEqual(outbound_line.with_user(operator).outbound_order_id, outbound)
+        with self.assertRaises(AccessError):
+            inbound.with_user(operator).unlink()
+
+    def test_callback_fingerprint_ignores_json_format_and_unordered_sn_lines(self):
+        """验证字段顺序、数值序列化和无序 SN 明细排列不改变指纹。"""
+        first = {
+            "action": "CREATE", "owner": "OWNER", "inboundOrderNo": "IN-1",
+            "snList": [
+                {"productCode": "P1", "productSN": "SN-1", "quantity": 1.0},
+                {"productCode": "P1", "productSN": "SN-2", "quantity": 1},
+            ],
+        }
+        second = {
+            "snList": [
+                {"quantity": 1, "productSN": "SN-2", "productCode": "P1"},
+                {"quantity": 1.0, "productCode": "P1", "productSN": "SN-1"},
+            ],
+            "inboundOrderNo": "IN-1", "owner": "OWNER", "action": "CREATE",
+        }
+        original = deepcopy(first)
+        self.assertEqual(idempotency._fingerprint(first, "API04"),
+                         idempotency._fingerprint(second, "API04"))
+        self.assertNotEqual(idempotency._fingerprint({"quantity": 1}),
+                            idempotency._fingerprint({"quantity": "1"}))
+        self.assertEqual(first, original, "计算指纹不得重排或修改实际 Payload")
+
+    def test_callback_response_classification_requires_protocol_evidence(self):
+        """仅将明确 V3.2 Y/N 视作定论；普通 HTTP 错误或不完整响应视为未知。"""
+        def response(status, body):
+            """构造只读 HTTP 响应夹具，验证分类时不依赖网络。"""
+            return SimpleNamespace(
+                status_code=status,
+                text=json.dumps(body, ensure_ascii=False) if body is not None else "not-json",
+                json=lambda: body,
+            )
+
+        self.assertEqual(
+            ginlong_callbacks._callback_outcome(response(200, {
+                "returnStatus": "Y", "exceptionInfo": "OK",
+                "operationTime": "2026-11-25 10:00:00",
+            }), "API02")["state"],
+            "succeeded",
+        )
+        self.assertEqual(
+            ginlong_callbacks._callback_outcome(response(503, {
+                "returnStatus": "N", "exceptionInfo": "拒绝",
+                "operationTime": "2026-11-25 10:00:01",
+            }), "API02")["state"],
+            "failed",
+        )
+        for status, body in (
+            (400, {"error": "bad request"}),
+            (503, {"error": "temporary failure"}),
+            (200, {"returnStatus": "Y"}),
+            (200, None),
+            (302, {"returnStatus": "Y", "exceptionInfo": "OK",
+                   "operationTime": "2026-11-25 10:00:02"}),
+        ):
+            with self.subTest(status=status, body=body):
+                self.assertEqual(
+                    ginlong_callbacks._callback_outcome(response(status, body), "API02")["state"],
+                    "unknown",
+                )
+
+    def test_callback_unknown_http_responses_require_risk_confirmation(self):
+        """通过真实本机 HTTP 验证无明确 N 的 5xx 和不完整 2xx 需用户确认后重试。"""
+        scenarios = (
+            (503, {"error": "temporary failure"}),
+            (200, {"returnStatus": "Y"}),
+        )
+        for index, (status, body) in enumerate(scenarios, start=1):
+            receiver = _LocalGinlongReceiver(responses=[
+                (status, body, 0),
+                (200, {
+                    "returnStatus": "Y", "exceptionInfo": "OK",
+                    "operationTime": "2026-11-25 10:00:00",
+                }, 0),
+            ])
+            result = services.api01(
+                self.env, self.api_user,
+                self._api01("CALLBACK-UNKNOWN-RESPONSE-%s-%s" % (index, uuid.uuid4().hex[:8])),
+            )
+            order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+            endpoint = receiver.url + "/API02"
+            self.env["ir.config_parameter"].sudo().set_param(
+                "ginlong_apis.api02_callback_url", endpoint,
+            )
+            try:
+                first = order.action_ginlong_api02()
+                self.assertEqual(first["params"]["type"], "danger")
+                self.assertEqual(len(receiver.records), 1)
+                confirmation = order.action_ginlong_api02()
+                self.assertEqual(confirmation["res_model"], "ginlong.api.callback.confirmation")
+                wizard = self.env["ginlong.api.callback.confirmation"].browse(confirmation["res_id"])
+                self.assertTrue(wizard.has_unknown)
+                self.assertEqual(len(receiver.records), 1, "风险确认前不得发送重试 HTTP")
+                wizard.confirm_unknown = True
+                retry = wizard.action_confirm()
+                self.assertEqual(retry["params"]["type"], "success")
+                self.assertEqual(len(receiver.records), 2)
+                self.assertEqual(receiver.records[-1]["body"]["receiptConfirmed"], "N")
+                self.assertEqual(
+                    self.env["ginlong.api.idempotency"].search_count([
+                        ("api_code", "=", "API02"),
+                        ("stable_event_key", "=", idempotency.callback_event_identity(
+                            "API02", ginlong_callbacks._build_payload("API02", order),
+                            ginlong_callbacks._callback_context(order, "API02"),
+                        )[0]),
+                    ]),
+                    2,
+                )
+                logs = self.env["world.depot.api.log"].search([
+                    ("request_path", "=", endpoint),
+                ], order="id")
+                self.assertEqual(len(logs), 2)
+                self.assertFalse(logs[0].success)
+                self.assertTrue(logs[1].success)
+            finally:
+                receiver.close()
+
+    def test_callback_write_date_change_does_not_change_repeat_confirmation(self):
+        """确认非 Payload 字段更新不改变成功事件指纹或重复回传判定。"""
+        receiver = _LocalGinlongReceiver()
+        result = services.api01(
+            self.env, self.api_user,
+            self._api01("CALLBACK-IRRELEVANT-WRITE-%s" % uuid.uuid4().hex[:8]),
+        )
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        endpoint = receiver.url + "/API02"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
+        try:
+            order.action_ginlong_api02()
+            previous_payload = ginlong_callbacks._build_payload("API02", order)
+            previous_context = ginlong_callbacks._callback_context(order, "API02")
+            order.write({"remark": "仅修改不属于 API02 Payload 的备注"})
+            order.invalidate_recordset(["remark"])
+            self.assertEqual(order.remark, "仅修改不属于 API02 Payload 的备注")
+            self.assertEqual(ginlong_callbacks._build_payload("API02", order), previous_payload)
+            self.assertEqual(ginlong_callbacks._callback_context(order, "API02"), previous_context)
+            changed_irrelevant_timestamp = deepcopy(previous_context)
+            changed_irrelevant_timestamp["source"]["write_date"] = "2099-01-01 00:00:00"
+            self.assertEqual(
+                idempotency.callback_event_identity("API02", previous_payload, previous_context)[0],
+                idempotency.callback_event_identity(
+                    "API02", previous_payload, changed_irrelevant_timestamp,
+                )[0],
+            )
+
+            confirmation = order.action_ginlong_api02()
+            self.assertEqual(confirmation["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(len(receiver.records), 1)
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(confirmation["res_id"])
+            snapshot = json.loads(wizard.event_snapshots)[0]
+            self.assertEqual(
+                snapshot["fingerprint"],
+                idempotency.callback_event_identity("API02", previous_payload, previous_context)[1],
+            )
+            wizard.action_cancel()
+            self.assertEqual(len(receiver.records), 1)
+            self.assertEqual(self.env["world.depot.api.log"].search_count([
+                ("request_path", "=", endpoint),
+            ]), 1)
+        finally:
+            receiver.close()
+
+    def test_callback_confirmation_uses_current_payload_after_business_change(self):
+        """确认窗口打开期间业务状态变化时，重新读取并发送当前 Payload 而非旧快照。"""
+        receiver = _LocalGinlongReceiver()
+        result = services.api01(
+            self.env, self.api_user,
+            self._api01("CALLBACK-CONFIRM-CHANGED-%s" % uuid.uuid4().hex[:8]),
+        )
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        endpoint = receiver.url + "/API02"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
+        try:
+            order.action_ginlong_api02()
+            confirmation = order.action_ginlong_api02()
+            self.assertEqual(confirmation["res_model"], "ginlong.api.callback.confirmation")
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(confirmation["res_id"])
+            self.assertEqual(len(receiver.records), 1)
+
+            order.action_mark_arrived()
+            result = wizard.action_confirm()
+            self.assertEqual(result["params"]["type"], "success")
+            self.assertEqual(len(receiver.records), 2)
+            self.assertEqual(receiver.records[0]["body"]["receiptConfirmed"], "N")
+            self.assertEqual(receiver.records[1]["body"]["receiptConfirmed"], "Y")
+            logs = self.env["world.depot.api.log"].search([
+                ("request_path", "=", endpoint),
+            ], order="id")
+            self.assertEqual(len(logs), 2)
+            self.assertIn('"receiptConfirmed": "N"', logs[0].request_data)
+            self.assertIn('"receiptConfirmed": "Y"', logs[1].request_data)
+        finally:
+            receiver.close()
+
+    def test_legacy_success_log_opens_confirmation_and_repeat_adds_new_http_event(self):
+        """将升级前的成功 API Log 识别为历史，并在确认后真实追加发送记录。"""
+        receiver = _LocalGinlongReceiver()
+        result = services.api01(
+            self.env, self.api_user, self._api01("CALLBACK-LEGACY-%s" % uuid.uuid4().hex[:8])
+        )
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        endpoint = receiver.url + "/API/WMS_JSON/TPL_Receipt_Confirmation"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
+        payload = ginlong_callbacks._build_payload("API02", order)
+        historical_response = json.dumps({
+            "returnStatus": "Y", "exceptionInfo": "OK",
+            "operationTime": "2026-11-25 10:00:00",
+        })
+        ginlong_callbacks._write_api_log(
+            order, "API02", endpoint, payload, historical_response, 200, False,
+            source_record=order,
+        )
+        ginlong_callbacks._write_api_log(
+            order, "API02", endpoint, payload, historical_response, 200, False,
+            source_record=order,
+        )
+        historical_logs = self.env["world.depot.api.log"].search([
+            ("request_path", "=", endpoint),
+            ("ginlong_api_code", "=", "API02"),
+        ], order="id asc")
+        earlier_historical_log, later_historical_log = historical_logs
+        earlier_historical_log.write({"request_time": "2026-01-01 10:00:00"})
+        later_historical_log.write({"request_time": "2026-02-01 10:00:00"})
+        historical_logs = self.env["world.depot.api.log"].search([
+            ("request_path", "=", endpoint),
+            ("ginlong_api_code", "=", "API02"),
+        ], order="request_time asc, id asc")
+        historical_log = historical_logs[0]
+        self.assertEqual(historical_log, earlier_historical_log)
+        self.assertTrue(historical_log.success)
+
+        try:
+            action = order.action_ginlong_api02()
+            self.assertEqual(action["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(receiver.records, [])
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(action["res_id"])
+            self.assertIn("succeeded", wizard.history_summary)
+            self.assertIn("2026-01-01 10:00:00", wizard.history_summary)
+            snapshots = json.loads(wizard.event_snapshots)
+            self.assertEqual(snapshots[0]["legacy_log_id"], historical_log.id)
+            confirmed = wizard.action_confirm()
+            self.assertEqual(confirmed["params"]["type"], "success")
+            self.assertTrue(receiver.wait_for_count(1))
+            self.assertEqual(receiver.records[0]["body"], payload)
+            self.assertEqual(receiver.records[0]["headers"].get("Content-Type"), "application/json")
+            # 同一令牌第二次确认必须无副作用，即使界面重复提交 RPC。
+            wizard.action_confirm()
+            self.assertEqual(len(receiver.records), 1)
+        finally:
+            receiver.close()
+
+        historical_log.invalidate_recordset()
+        self.assertTrue(historical_log.success)
+        new_logs = self.env["world.depot.api.log"].search([
+            ("request_path", "=", endpoint),
+            ("ginlong_api_code", "=", "API02"),
+        ], order="id")
+        self.assertEqual(len(new_logs), 3)
+        self.assertTrue(new_logs[0].success)
+        self.assertEqual(new_logs[0].request_data, json.dumps(payload, ensure_ascii=False))
+        self.assertTrue(new_logs[1].success)
+        self.assertFalse(new_logs[1].ginlong_idempotency_id)
+        self.assertTrue(new_logs[2].success)
+        self.assertTrue(new_logs[2].ginlong_idempotency_id)
+        events = self.env["ginlong.api.idempotency"].search([
+            ("api_code", "=", "API02"),
+            ("stable_event_key", "=", idempotency.callback_event_identity(
+                "API02", payload, ginlong_callbacks._callback_context(order, "API02"),
+            )[0]),
+        ], order="id")
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0].legacy_api_log_id, historical_log)
+        self.assertEqual(events[1].parent_event_id, events[0])
+        self.assertEqual(new_logs[2].ginlong_idempotency_id, events[1])
+
+    def test_successful_callback_cancel_does_not_send_or_append_http_log(self):
+        """验证用户取消成功事件重复确认时不发 HTTP、不写 API Log 并记录 Chatter。"""
+        result = services.api01(self.env, self.api_user, self._api01("CALLBACK-CANCEL-%s" % uuid.uuid4().hex[:8]))
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        endpoint = "http://mock.invalid/API/WMS_JSON/callback-cancel-%s" % order.id
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
         response = SimpleNamespace(
             status_code=200,
-            text='{"returnStatus":"Y","exceptionInfo":"OK","operationTime":"2026-06-01 14:30:25"}',
-            json=lambda: {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-06-01 14:30:25"},
+            text='{"returnStatus":"Y","exceptionInfo":"OK","operationTime":"2026-11-25 10:00:00"}',
+            json=lambda: {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-25 10:00:00"},
         )
         with patch("odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post", return_value=response) as send:
+            first = order.action_ginlong_api02()
+            confirmation = order.action_ginlong_api02()
+            self.assertEqual(confirmation["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(send.call_count, 1)
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(confirmation["res_id"])
+            canceled = wizard.action_cancel()
+        self.assertEqual(canceled["params"]["type"], "warning")
+        self.assertEqual(send.call_count, 1)
+        logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)])
+        self.assertEqual(len(logs), 1)
+        self.assertTrue(logs.success)
+        self.assertTrue(logs.ginlong_idempotency_id)
+        self.assertTrue(any("取消回传" in (message.body or "") for message in order.message_ids))
+        self.assertEqual(first["params"]["type"], "success")
+
+    def test_api04_mixed_success_and_failed_pickings_defaults_to_only_unsuccessful(self):
+        """验证 API04 多 Picking 混合状态默认只重试失败项，不重复已成功项。"""
+        created = services.api01(self.env, self.api_user, self._api01("API04-MIXED-%s" % uuid.uuid4().hex[:8]))
+        order = self.env["world.depot.inbound.order"].browse(created["data"]["id"])
+        first_picking, _first_product = self._create_actual_picking(
+            order, incoming=True, suffix="API04-MIXED-1", done=True,
+        )
+        second_picking, _second_product = self._create_actual_picking(
+            order, incoming=True, suffix="API04-MIXED-2", done=True,
+        )
+        receiver = _LocalGinlongReceiver(responses=[
+            (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-25 10:00:00"}, 0),
+            (503, {"returnStatus": "N", "exceptionInfo": "拒绝", "operationTime": "2026-11-25 10:00:01"}, 0),
+            (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-25 10:00:02"}, 0),
+        ])
+        endpoint = receiver.url + "/API04"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
+        try:
+            initial = order.action_ginlong_api04()
+            self.assertEqual(initial["params"]["type"], "danger")
+            self.assertEqual(len(receiver.records), 2)
+            confirmation = order.action_ginlong_api04()
+            self.assertEqual(confirmation["res_model"], "ginlong.api.callback.confirmation")
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(confirmation["res_id"])
+            self.assertEqual(wizard.scope, "unsuccessful")
+            retry = wizard.action_confirm()
+            self.assertEqual(retry["params"]["type"], "success")
+        finally:
+            receiver.close()
+        self.assertEqual(len(receiver.records), 3)
+        self.assertEqual(
+            receiver.records[1]["body"], receiver.records[2]["body"],
+            "失败 Picking 的人工重试必须复用同一 Picking 实际 Payload",
+        )
+        logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
+        self.assertEqual(len(logs), 3)
+        self.assertEqual(logs[0].source_record, first_picking)
+        self.assertEqual(logs[1].source_record, second_picking)
+        self.assertEqual(logs[2].source_record, second_picking)
+        self.assertTrue(logs[0].success)
+        self.assertFalse(logs[1].success)
+        self.assertTrue(logs[2].success)
+
+    def test_api04_multi_picking_unknown_requires_risk_confirmation(self):
+        """验证 API04 多 Picking 的明确失败可直接重试，结果未知必须单独确认风险。"""
+        created = services.api01(
+            self.env, self.api_user, self._api01("API04-UNKNOWN-%s" % uuid.uuid4().hex[:8])
+        )
+        order = self.env["world.depot.inbound.order"].browse(created["data"]["id"])
+        pickings = [
+            self._create_actual_picking(
+                order, incoming=True, suffix="API04-UNKNOWN-%s" % index, done=True,
+            )[0]
+            for index in range(1, 4)
+        ]
+        receiver = _LocalGinlongReceiver(responses=[
+            (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-25 10:00:00"}, 0),
+            (503, {"returnStatus": "N", "exceptionInfo": "拒绝", "operationTime": "2026-11-25 10:00:01"}, 0),
+            (503, {"error": "response did not establish processing result"}, 0),
+            (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-25 10:00:02"}, 0),
+            (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-25 10:00:03"}, 0),
+        ])
+        endpoint = receiver.url + "/API04"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
+        try:
+            initial = order.action_ginlong_api04()
+            self.assertEqual(initial["params"]["type"], "danger")
+            self.assertEqual(len(receiver.records), 3)
+
+            retry_failed = order.action_ginlong_api04()
+            self.assertEqual(retry_failed["res_model"], "ginlong.api.callback.confirmation")
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(retry_failed["res_id"])
+            self.assertTrue(wizard.has_unknown)
+            self.assertEqual(wizard.scope, "unsuccessful")
+            retry_result = wizard.action_confirm()
+            self.assertEqual(retry_result["params"]["type"], "danger")
+            self.assertEqual(len(receiver.records), 4, "默认只直接重试明确失败的 Picking")
+
+            risk_confirmation = order.action_ginlong_api04()
+            self.assertEqual(risk_confirmation["res_model"], "ginlong.api.callback.confirmation")
+            risk_wizard = self.env["ginlong.api.callback.confirmation"].browse(risk_confirmation["res_id"])
+            self.assertTrue(risk_wizard.has_unknown)
+            self.assertEqual(len(receiver.records), 4, "未知结果未获确认前不得重发")
+            risk_wizard.confirm_unknown = True
+            confirmed = risk_wizard.action_confirm()
+            self.assertEqual(confirmed["params"]["type"], "success")
+            self.assertEqual(len(receiver.records), 5)
+        finally:
+            receiver.close()
+
+        logs = self.env["world.depot.api.log"].search([
+            ("request_path", "=", endpoint),
+        ], order="id")
+        self.assertEqual(len(logs), 5)
+        self.assertEqual(
+            [logs[index].source_record for index in range(3)], pickings,
+        )
+        self.assertEqual(logs[3].source_record, pickings[1])
+        self.assertEqual(logs[4].source_record, pickings[2])
+        self.assertTrue(logs[0].success)
+        self.assertFalse(logs[1].success)
+        self.assertFalse(logs[2].success)
+        self.assertTrue(logs[3].success and logs[4].success)
+
+    def test_stable_callback_event_serializes_different_confirmation_tokens(self):
+        """用真实 Mock HTTP 和独立用户事务验证两个确认令牌竞争同一事件只发送一次。"""
+        dbname = self.env.cr.dbname
+        marker = uuid.uuid4().hex
+        with self._new_committed_cursor(dbname) as cr:
+            committed_env = api.Environment(cr, SUPERUSER_ID, {})
+            project = committed_env["project.project"].sudo().search([], limit=1)
+            self.assertTrue(project, "并发测试需要一条现有项目作为真实 inbound.order 的必填归属")
+            source = committed_env["world.depot.inbound.order"].sudo().create({
+                "project": project.id,
+                "reference": "GINLONG-CALLBACK-CONCURRENCY-%s" % marker,
+                "warehouse": project.warehouse.id if project.warehouse else False,
+                "pick_type": project.inbound_pick_type.id if project.inbound_pick_type else False,
+            })
+            source_id = source.id
+            second_user = committed_env["res.users"].sudo().with_context(no_reset_password=True).create({
+                "name": "Ginlong callback second user %s" % marker,
+                "login": "ginlong-callback-second-%s" % marker,
+                "groups_id": [(6, 0, [committed_env.ref("base.group_user").id])],
+            })
+            second_user_id = second_user.id
+
+        receiver = _LocalGinlongReceiver()
+        payload = {
+            "inboundOrderNo": "CALLBACK-CONCURRENT-%s" % marker,
+            "action": "UPDATE",
+            "receiptConfirmed": "Y",
+        }
+        second_payload = dict(payload, receiptConfirmed="N")
+        source_model = "world.depot.inbound.order"
+        context = {"source": {"model": source_model, "id": source_id, "business_key": marker}}
+        stable_key, _fingerprint = idempotency.callback_event_identity("API02", payload, context)
+        second_stable_key, second_fingerprint = idempotency.callback_event_identity(
+            "API02", second_payload, context,
+        )
+        self.assertEqual(stable_key, second_stable_key)
+        self.assertNotEqual(_fingerprint, second_fingerprint)
+        # 先执行一次已成功的回传，使两个竞争事务都处于“确认重复发送”状态。
+        with self._new_committed_cursor(dbname) as cr:
+            env = api.Environment(cr, SUPERUSER_ID, {})
+            source_record = env[source_model].browse(source_id)
+
+            def seed_operation():
+                """真实发送首个请求，建立等待用户重复确认的成功历史。"""
+                response = requests.post(receiver.url + "/API02", json=payload, timeout=5)
+                return ginlong_callbacks._callback_outcome(response, "API02") | {
+                    "status_code": response.status_code, "response_text": response.text,
+                }
+
+            seed = idempotency.execute_callback_event(
+                env, "API02", payload, context, source_record, seed_operation,
+                expected_generation=0,
+            )
+            self.assertTrue(seed["sent"])
+            self.assertEqual(seed["state"], "succeeded")
+        self.assertEqual(len(receiver.records), 1)
+        receiver.hold_responses = True
+        receiver.response_release.clear()
+
+        first_request_started = threading.Event()
+        second_request_started = threading.Event()
+        inspection_started = threading.Event()
+        release_results = {}
+        inspection_results = {}
+        errors = {}
+        operation_calls = []
+        call_lock = threading.Lock()
+
+        def worker(name, user_id, confirmed_token):
+            """每个线程使用独立的 Odoo ORM 游标模拟不同 Worker/标签页。"""
+            try:
+                with self._new_committed_cursor(dbname) as cr:
+                    env = api.Environment(cr, user_id, {})
+                    source_record = env[source_model].browse(source_id)
+                    invoked_at = idempotency.callback_now()
+                    worker_payload = payload if name == "first" else second_payload
+                    if name == "second":
+                        second_request_started.set()
+
+                    def operation():
+                        """真正向本地 Mock 发送 HTTP，并只计入实际外发调用。"""
+                        with call_lock:
+                            operation_calls.append(name)
+                        if name == "first":
+                            first_request_started.set()
+                        response = requests.post(
+                            receiver.url + "/API02", json=worker_payload,
+                            headers={"Content-Type": "application/json"}, timeout=5,
+                        )
+                        return ginlong_callbacks._callback_outcome(response, "API02") | {
+                            "status_code": response.status_code, "response_text": response.text,
+                        }
+
+                    release_results[name] = idempotency.execute_callback_event(
+                        env, "API02", worker_payload, context, source_record, operation,
+                        invoked_at=invoked_at,
+                        expected_generation=1,
+                        confirmation_token=confirmed_token,
+                        confirmed_by_id=user_id,
+                        force_repeat=True,
+                    )
+            except Exception as exc:
+                errors[name] = "%r\n%s" % (exc, traceback.format_exc())
+
+        def click_callback_while_sending():
+            """模拟另一浏览器标签页在 HTTP 尚未完成时打开同一回传事件。"""
+            try:
+                with self._new_committed_cursor(dbname) as cr:
+                    env = api.Environment(cr, second_user_id, {})
+                    source_record = env[source_model].browse(source_id)
+                    inspection_started.set()
+                    candidate = {
+                        "source": source_record,
+                        "payload": payload,
+                        "context": context,
+                        "label": "API02 %s" % marker,
+                    }
+                    with patch("odoo.addons.ginlong_apis.models.ginlong_callbacks._callback_chatter"):
+                        inspection_results["action"] = ginlong_callbacks._process_confirmable_callbacks(
+                            source_record, "API02", receiver.url + "/API02", [candidate],
+                            idempotency.callback_now(),
+                        )
+            except Exception as exc:
+                errors["inspection"] = "%r\n%s" % (exc, traceback.format_exc())
+
+        first_token, second_token = uuid.uuid4().hex, uuid.uuid4().hex
+        first = threading.Thread(
+            target=worker, args=("first", SUPERUSER_ID, first_token), daemon=True,
+        )
+        second = threading.Thread(
+            target=worker, args=("second", second_user_id, second_token), daemon=True,
+        )
+        inspector = threading.Thread(target=click_callback_while_sending, daemon=True)
+        cursor_factory = lambda *args, **kwargs: self._new_committed_cursor(dbname)
+        cursor_patch = patch.object(self.env.registry, "cursor", side_effect=cursor_factory)
+        cursor_patch.start()
+        try:
+            first.start()
+            self.assertTrue(receiver.wait_for_count(2, timeout=5), "第一个重复确认未到达本地 Mock")
+            self.assertTrue(first_request_started.wait(5), "第一个确认事务未进入 HTTP 请求")
+            second.start()
+            self.assertTrue(second_request_started.wait(5), "第二个独立事务未启动")
+            inspector.start()
+            self.assertTrue(inspection_started.wait(5), "第二个标签页未开始读取回传状态")
+            time.sleep(0.2)
+            self.assertEqual(len(receiver.records), 2, "首个确认仍等待响应时第二个标签页不能并发发送")
+            receiver.response_release.set()
+            first.join(timeout=10)
+            second.join(timeout=10)
+            inspector.join(timeout=10)
+            self.assertFalse(first.is_alive() or second.is_alive() or inspector.is_alive(), "并发线程未结束")
+            self.assertFalse(errors, errors)
+            self.assertEqual(operation_calls, ["first"])
+            self.assertTrue(release_results["first"]["sent"])
+            self.assertFalse(release_results["second"]["sent"])
+            self.assertEqual(release_results["second"]["reason"], "concurrent_event")
+            self.assertEqual(
+                inspection_results["action"].get("res_model"), None,
+                "其他标签页不得把执行中的事件当成历史成功并弹出重复确认框",
+            )
+            self.assertEqual(inspection_results["action"].get("tag"), "display_notification")
+            self.assertEqual(len(receiver.records), 2)
+            self.assertEqual(receiver.records[0]["body"], payload)
+            self.assertEqual(receiver.records[1]["body"], payload)
+            with self._new_committed_cursor(dbname) as cr:
+                committed_env = api.Environment(cr, SUPERUSER_ID, {})
+                events = committed_env["ginlong.api.idempotency"].sudo().search([
+                    ("api_code", "=", "API02"), ("stable_event_key", "=", stable_key),
+                ], order="id")
+                root = events.filtered(lambda item: item.coordination_key)
+                attempts = events.filtered("execution_slot")
+                self.assertEqual(len(root), 1)
+                self.assertEqual(root.execution_generation, 2)
+                self.assertEqual(len(attempts), 2)
+                self.assertEqual(len(set(attempts.mapped("execution_slot"))), 2)
+                self.assertEqual(attempts[-1].state, "succeeded")
+        finally:
+            cursor_patch.stop()
+            receiver.response_release.set()
+            receiver.close()
+            with self._new_committed_cursor(dbname) as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {})
+                env["ginlong.api.idempotency"].sudo().search([
+                    ("api_code", "=", "API02"), ("coordination_key", "=", stable_key),
+                ]).unlink()
+                env[source_model].sudo().browse(source_id).unlink()
+                env["res.users"].sudo().browse(second_user_id).unlink()
+
+    def test_api04_auto_scans_done_incoming_and_uses_picking_actuals(self):
+        """验证 API04 读取真实入库行，并为非 SN 产品使用产品编码。"""
+        result = services.api01(self.env, self.api_user, self._api01("GINLONG-CALLBACK-API04"))
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        picking, product = self._create_actual_picking(
+            order, incoming=True, suffix="API04-DONE", done=False
+        )
+        tracked_line = picking.move_line_ids.filtered(lambda line: line.product_id == product)
+        raw_product = self.env["product.product"].create({
+            "name": "Actual non-serial API04 product",
+            "default_code": "GINLONG-CB-API04-RAW",
+            "ginlong_product_code": "GINLONG-CB-API04-RAW",
+            "type": "consu",
+            "tracking": "none",
+        })
+        raw_move = self.env["stock.move"].create({
+            "name": "Actual non-serial API04 move",
+            "product_id": raw_product.id,
+            "product_uom_qty": 3,
+            "product_uom": raw_product.uom_id.id,
+            "picking_id": picking.id,
+            "location_id": picking.location_id.id,
+            "location_dest_id": picking.location_dest_id.id,
+        })
+        self.env["stock.move.line"].create({
+            "picking_id": picking.id,
+            "move_id": raw_move.id,
+            "product_id": raw_product.id,
+            "product_uom_id": raw_product.uom_id.id,
+            "location_id": picking.location_id.id,
+            "location_dest_id": picking.location_dest_id.id,
+            "quantity": 3,
+            "result_package_id": tracked_line.result_package_id.id,
+        })
+        picking.action_confirm()
+        picking.move_ids.picked = True
+        picking.button_validate()
+        self.assertEqual(picking.state, "done")
+        self.assertEqual(picking.ginlong_actual_inbound_operator_id, self.env.user)
+        second_picking, second_product = self._create_actual_picking(
+            order, incoming=True, suffix="API04-DONE-SECOND", done=True
+        )
+        self._create_actual_picking(order, incoming=True, suffix="API04-NOT-DONE")
+        other_order_result = services.api01(
+            self.env, self.api_user, self._api01("GINLONG-CALLBACK-API04-OTHER-ORDER")
+        )
+        other_order = self.env["world.depot.inbound.order"].browse(other_order_result["data"]["id"])
+        self._create_actual_picking(
+            other_order, incoming=True, suffix="API04-OTHER-ORDER-DONE", done=True
+        )
+        outbound_result = services.api03(
+            self.env, self.api_user, self._api03("GINLONG-CALLBACK-API04-OUTGOING")
+        )
+        outbound_order = self.env["world.depot.outbound.order"].browse(outbound_result["data"]["id"])
+        wrong_type_picking, _wrong_type_product = self._create_actual_picking(
+            outbound_order, incoming=False, suffix="API04-OUTGOING-DONE", done=True
+        )
+        # 关联当前入库单但保留 outgoing picking type，单独验证方向条件会排除此 Picking。
+        wrong_type_picking.write({"inbound_order_id": order.id})
+        line = tracked_line
+        self.assertEqual(picking.state, "done")
+        self.assertEqual(picking.ginlong_actual_inbound_operator_id, self.env.user)
+        self.assertTrue(picking.date_done)
+
+        receiver = _LocalGinlongReceiver(responses=[
+            (200, {
+                "returnStatus": "Y", "exceptionInfo": "OK",
+                "operationTime": "2026-11-24 10:00:00",
+            }, 0),
+            (200, {
+                "returnStatus": "Y", "exceptionInfo": "OK",
+                "operationTime": "2026-11-24 10:00:01",
+            }, 0),
+        ])
+        endpoint = receiver.url + "/API/WMS_JSON/TPL_Inbound_Completion"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
+        quants_before = self.env["stock.quant"].search([]).read(["product_id", "location_id", "quantity", "reserved_quantity"])
+        try:
             action = order.action_ginlong_api04()
+            repeat_action = order.action_ginlong_api04()
+            self.assertEqual(repeat_action["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(len(receiver.records), 2)
+            repeat_wizard = self.env["ginlong.api.callback.confirmation"].browse(repeat_action["res_id"])
+            self.assertTrue(repeat_wizard.multi_event)
+            self.assertEqual(repeat_wizard.scope, "unsuccessful")
+            canceled_repeat = repeat_wizard.action_cancel()
+            self.assertEqual(canceled_repeat["params"]["type"], "warning")
+            self.assertEqual(len(receiver.records), 2, "多 Picking 取消必须零发送")
+            all_action = order.action_ginlong_api04()
+            self.assertEqual(all_action["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(len(receiver.records), 2)
+            all_wizard = self.env["ginlong.api.callback.confirmation"].browse(all_action["res_id"])
+            all_wizard.scope = "all"
+            confirmed_repeat = all_wizard.action_confirm()
+        finally:
+            receiver.close()
 
         self.assertEqual(action["tag"], "display_notification")
         self.assertEqual(action["params"]["type"], "success")
-        send.assert_called_once()
-        args, kwargs = send.call_args
-        self.assertEqual(args, (endpoint,))
-        self.assertEqual(kwargs["headers"], {"Content-Type": "application/json"})
-        self.assertEqual(kwargs["timeout"], 15)
-        payload = kwargs["json"]
-        self.assertEqual(payload["owner"], "OWNER-01")
-        self.assertEqual(payload["action"], "CREATE")
-        self.assertEqual(payload["inboundOrderNo"], order.reference)
-        self.assertEqual(payload["snList"], [{
-            "productSN": "ACTUAL-SN-API04-SAVED",
-            "quantity": 2,
-            "palletCode": "ACTUAL-PALLET-API04-SAVED",
+        self.assertEqual(confirmed_repeat["params"]["type"], "success")
+        self.assertEqual(len(receiver.records), 4)
+        self.assertEqual(receiver.records[0]["path"], "/API/WMS_JSON/TPL_Inbound_Completion")
+        self.assertEqual(receiver.records[0]["headers"]["Content-Type"], "application/json")
+        self.assertEqual(receiver.records[0]["body"]["snList"], [{
+            "productSN": line.lot_id.name,
+            "quantity": line.quantity,
+            "palletCode": line.result_package_id.name,
             "productCode": product.ginlong_product_code,
-            "operator": "actual.worker",
-            "operationTime": fields.Datetime.to_string(operation_time),
+            "operator": self.env.user.login,
+            "operationTime": fields.Datetime.to_string(picking.date_done),
+        }, {
+            "productSN": raw_product.ginlong_product_code,
+            "quantity": 3,
+            "palletCode": line.result_package_id.name,
+            "productCode": raw_product.ginlong_product_code,
+            "operator": self.env.user.login,
+            "operationTime": fields.Datetime.to_string(picking.date_done),
         }])
         log = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id desc", limit=1)
+        logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
+        self.assertEqual(len(logs), 4)
+        self.assertTrue(any("取消回传" in (message.body or "") for message in order.message_ids))
+        self.assertTrue(all(row.success for row in logs))
+        self.assertEqual(
+            {row.source_record.id for row in logs},
+            {picking.id, second_picking.id},
+        )
         self.assertTrue(log.success)
         self.assertIn('"action": "CREATE"', log.request_data)
-        self.assertIn('"returnStatus":"Y"', log.response_data)
+        self.assertEqual(json.loads(log.response_data)["returnStatus"], "Y")
+        self.assertEqual(
+            {row["body"]["inboundOrderNo"] for row in receiver.records},
+            {order.reference},
+        )
+        self.assertEqual(len({row["body"]["snList"][0]["productCode"] for row in receiver.records}), 2)
+        quants_after = self.env["stock.quant"].search([]).read(["product_id", "location_id", "quantity", "reserved_quantity"])
+        self.assertEqual(quants_after, quants_before)
 
-    def test_api04_failure_can_be_edited_and_retried_with_separate_logs(self):
-        """验证 API04 失败后可修改数据重试且日志分别追加。"""
+        for current_picking, current_product in ((picking, product), (second_picking, second_product)):
+            current_payload = ginlong_callbacks._api04_payload(order, current_picking)
+            current_context = ginlong_callbacks._callback_context(order, "API04", current_picking)
+            stable_key, current_fingerprint = idempotency.callback_event_identity(
+                "API04", current_payload, current_context,
+            )
+            events = self.env["ginlong.api.idempotency"].search([
+                ("api_code", "=", "API04"), ("stable_event_key", "=", stable_key),
+                ("request_fingerprint", "=", current_fingerprint),
+                ("state", "=", "succeeded"),
+            ], order="id")
+            self.assertEqual(len(events), 2, "每张 Picking 的重复确认都应追加独立 Event")
+            self.assertEqual(events[1].parent_event_id, events[0])
+            self.assertEqual(current_payload["snList"][0]["productCode"], current_product.ginlong_product_code)
+
+    def test_api04_without_eligible_picking_logs_blocked_attempt(self):
+        """验证没有当前订单 Done/Incoming Picking 时不发送并记录明确失败。"""
+        result = services.api01(self.env, self.api_user, self._api01("GINLONG-CALLBACK-API04-NONE"))
+        order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
+        endpoint = "http://mock.invalid/API/WMS_JSON/TPL_Inbound_Completion/none-%s" % order.id
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
+
+        with patch("odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post") as send:
+            action = order.action_ginlong_api04()
+
+        self.assertEqual(send.call_count, 0)
+        self.assertEqual(action["params"]["type"], "danger")
+        self.assertIn("没有已完成的 incoming Picking", action["params"]["message"])
+        log = self.env["world.depot.api.log"].search([
+            ("request_path", "=", endpoint),
+            ("ginlong_api_code", "=", "API04"),
+        ], limit=1)
+        self.assertTrue(log)
+        self.assertFalse(log.success)
+        self.assertEqual(log.source_record, order)
+    def test_api04_failed_picking_can_be_retried_without_changing_history(self):
+        """验证 API04 单 Picking 失败后可人工重试，Event 累计尝试且日志分别追加。"""
         result = services.api01(self.env, self.api_user, self._api01("GINLONG-CALLBACK-RETRY"))
         order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
-        picking, _product = self._create_actual_picking(order, incoming=True, suffix="API04-RETRY")
-        picking.ginlong_callback_selected = True
-        line = picking.move_line_ids
-        line.write({
-            "ginlong_operator_code": "initial.worker",
-            "ginlong_operation_time": fields.Datetime.now(),
-        })
-        self.env.flush_all()
-        self.env.invalidate_all()
-        order = self.env["world.depot.inbound.order"].browse(order.id)
-        picking = self.env["stock.picking"].browse(picking.id)
-        line = picking.move_line_ids
-        endpoint = "http://mock.invalid/API/WMS_JSON/retry-%s" % order.id
-        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
-        failed = SimpleNamespace(status_code=503, text='{"returnStatus":"N","exceptionInfo":"unavailable"}')
-        succeeded = SimpleNamespace(
-            status_code=200,
-            text='{"returnStatus":"Y","exceptionInfo":"OK","operationTime":"2026-06-01 14:30:25"}',
-            json=lambda: {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-06-01 14:30:25"},
+        picking, _product = self._create_actual_picking(
+            order, incoming=True, suffix="API04-RETRY", done=True
         )
-        with patch(
-            "odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post",
-            side_effect=[failed, succeeded],
-        ) as send:
+        receiver = _LocalGinlongReceiver(responses=[
+            (503, {"returnStatus": "N", "exceptionInfo": "Mock unavailable"}, 0),
+            (200, {
+                "returnStatus": "Y", "exceptionInfo": "OK",
+                "operationTime": "2026-11-24 10:05:00",
+            }, 0),
+        ])
+        endpoint = receiver.url + "/API/WMS_JSON/TPL_Inbound_Completion"
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api04_callback_url", endpoint)
+        try:
             first_action = order.action_ginlong_api04()
             first_log = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id desc", limit=1)
             first_error = first_log.exception_details
-            line.write({"ginlong_operator_code": "corrected.worker"})
-            self.env.flush_all()
-            self.env.invalidate_all()
-            order = self.env["world.depot.inbound.order"].browse(order.id)
-            picking = self.env["stock.picking"].browse(picking.id)
-            line = picking.move_line_ids
-            self.assertEqual(line.ginlong_operator_code, "corrected.worker")
             second_action = order.action_ginlong_api04()
+        finally:
+            receiver.close()
 
         self.assertEqual(first_action["params"]["type"], "danger")
         self.assertEqual(second_action["params"]["type"], "success")
-        self.assertEqual(send.call_count, 2)
+        self.assertEqual(len(receiver.records), 2)
+        self.assertEqual(receiver.records[0]["path"], receiver.records[1]["path"])
+        self.assertEqual(receiver.records[0]["body"], receiver.records[1]["body"])
         logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
         self.assertEqual(len(logs), 2)
         self.assertEqual(logs[0].exception_details, first_error)
         self.assertFalse(logs[0].success)
         self.assertTrue(logs[1].success)
-        self.assertIn("initial.worker", logs[0].request_data)
-        self.assertIn("corrected.worker", logs[1].request_data)
-
+        self.assertEqual(logs[0].source_record, picking)
+        self.assertEqual(logs[1].source_record, picking)
+        self.assertEqual(logs[0].request_data, logs[1].request_data)
+        event_context = ginlong_callbacks._callback_context(order, "API04", picking)
+        stable_key, fingerprint = idempotency.callback_event_identity(
+            "API04", ginlong_callbacks._api04_payload(order, picking), event_context,
+        )
+        event = self.env["ginlong.api.idempotency"].search([
+            ("api_code", "=", "API04"), ("stable_event_key", "=", stable_key),
+            ("request_fingerprint", "=", fingerprint), ("state", "=", "succeeded"),
+        ], order="id desc", limit=1)
+        self.assertTrue(event)
+        self.assertEqual(event.attempt_count, 1)
+        self.assertEqual(event.parent_event_id.state, "failed")
     def test_api10_persists_action_scope_and_uses_only_saved_actual_results(self):
         """验证 API10 持久化 Action 范围并且只读取已保存实盘结果。"""
         order = self.env["world.depot.stocktake.order"].create({
@@ -1831,13 +2873,21 @@ class TestGinlongAPI(TransactionCase):
             "ginlong_operator_code": "counter.01",
             "ginlong_callback_selected": True,
         })
+        raw_code = "GINLONG-COUNT-RAW-%s" % uuid.uuid4().hex[:8]
+        raw_product = self.env["product.product"].create({
+            "name": "Non-serial actual count product",
+            "default_code": raw_code,
+            "ginlong_product_code": raw_code,
+            "type": "consu",
+            "tracking": "none",
+        })
         result_two = self.env["world.depot.stocktake.result"].create({
             "order_id": order.id,
-            "product_id": self.product.id,
-            "product_code": self.product.ginlong_product_code,
-            "product_name": self.product.name,
-            "serial_number": "COUNT-SN-002",
-            "quantity": 1,
+            "product_id": raw_product.id,
+            "product_code": raw_code,
+            "product_name": raw_product.name,
+            "serial_number": False,
+            "quantity": 7,
             "pallet_code": "COUNT-PALLET-2",
             "operator_id": self.env.user.id,
             "operation_time": fields.Datetime.now(),
@@ -1881,7 +2931,8 @@ class TestGinlongAPI(TransactionCase):
             order.action_ginlong_api10()
         payload = send_delete.call_args.kwargs["json"]
         self.assertEqual(payload["action"], "Del")
-        self.assertEqual([line["productSN"] for line in payload["snList"]], ["COUNT-SN-002"])
+        self.assertEqual([line["productSN"] for line in payload["snList"]], [raw_code])
+        self.assertEqual(payload["snList"][0]["quantity"], 7)
         self.assertEqual(ginlong_callbacks._canonical_action("API10", "dEl"), "Del")
 
     def test_callback_logs_do_not_expose_endpoint_credentials(self):
@@ -2073,14 +3124,17 @@ class TestGinlongAPI(TransactionCase):
                 raise_concurrency_error()
 
     def test_api_rate_defaults_and_configuration(self):
-        """验证四个入站 API 的默认限流值和后台配置读取。"""
+        """验证五个入站 API 的默认限流值和后台配置读取。"""
         settings = self.env["res.config.settings"].sudo()
         self.assertEqual(settings.get_ginlong_api_rate_limit("API01"), 10)
         self.assertEqual(settings.get_ginlong_api_rate_limit("API03"), 10)
         self.assertEqual(settings.get_ginlong_api_rate_limit("API05"), 10)
         self.assertEqual(settings.get_ginlong_api_rate_limit("API07"), 100)
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API09"), 10)
         self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api07_rate_limit", "140")
+        self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api09_rate_limit", "18")
         self.assertEqual(settings.get_ginlong_api_rate_limit("API07"), 140)
+        self.assertEqual(settings.get_ginlong_api_rate_limit("API09"), 18)
 
     def test_routes_use_worlddepot_token_and_api_log_decorators(self):
         """验证 Ginlong 路由复用 WorldDepot Token 和 API 日志装饰器。"""
@@ -2603,18 +3657,24 @@ class TestGinlongAPI(TransactionCase):
             ),
             env=self.env,
             registry=SimpleNamespace(cursor=_CursorContext),
-            api_user=False,
+            api_user=self.api_user,
             update_env=lambda user: None,
         )
         endpoint = ginlong_controller.GinlongSimulationController()
         with patch.object(validator_token, "request", fake_request), \
                 patch.object(api_logs, "request", fake_request), \
                 patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(rate_limiter, "request", fake_request), \
+                patch.object(rate_limiter, "_reserve", return_value=True), \
                 patch.object(api_logs.api, "Environment", side_effect=environment_factory):
             response = endpoint.api09()
 
         response_body = json.loads(response.get_data(as_text=True))
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            set(response_body),
+            {"returnStatus", "exceptionInfo", "operationTime", "owner", "warehouse", "inventoryList"},
+        )
         self.assertEqual(response_body["returnStatus"], "Y")
         self.assertEqual(response_body["owner"], "OWNER-01")
         self.assertEqual(response_body["warehouse"], self.warehouse.code)
@@ -2633,10 +3693,12 @@ class TestGinlongAPI(TransactionCase):
         with patch.object(validator_token, "request", fake_request), \
                 patch.object(api_logs, "request", fake_request), \
                 patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(rate_limiter, "request", fake_request), \
+                patch.object(rate_limiter, "_reserve", return_value=True), \
                 patch.object(api_logs.api, "Environment", side_effect=environment_factory):
             unknown_warehouse = endpoint.api09()
         unknown_warehouse_body = json.loads(unknown_warehouse.get_data(as_text=True))
-        self.assertEqual(unknown_warehouse.status_code, 400)
+        self.assertEqual(unknown_warehouse.status_code, 200)
         self.assertEqual(
             set(unknown_warehouse_body), {"returnStatus", "exceptionInfo", "operationTime"},
         )
@@ -2645,31 +3707,62 @@ class TestGinlongAPI(TransactionCase):
         self.assertEqual(len(log_model.values), 2)
         self.assertFalse(log_model.values[-1]["success"])
 
+        orphan_user = self.env["res.users"].with_context(no_reset_password=True).create({
+            "name": "Ginlong API09 user without API User",
+            "login": "ginlong-api09-no-api-user-%s" % uuid.uuid4().hex,
+            "groups_id": [(6, 0, [self.env.ref("base.group_user").id])],
+        })
+        orphan_token = "ginlong-api09-orphan-token"
+        self.env["world.depot.api.token"].create({
+            "user_id": orphan_user.id,
+            "token": orphan_token,
+            "expires": fields.Datetime.now() + timedelta(hours=1),
+        })
         fake_request.api_user = False
+        fake_request.httprequest.headers["Authorization"] = "Bearer " + orphan_token
+        with patch.object(validator_token, "request", fake_request), \
+                patch.object(api_logs, "request", fake_request), \
+                patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(rate_limiter, "request", fake_request), \
+                patch.object(api_logs.api, "Environment", side_effect=environment_factory), \
+                patch.object(ginlong_controller.services, "api09") as query:
+            unauthorized = endpoint.api09()
+        self.assertEqual(unauthorized.status_code, 403)
+        unauthorized_body = json.loads(unauthorized.get_data(as_text=True))
+        self.assertEqual(set(unauthorized_body), {"returnStatus", "exceptionInfo", "operationTime"})
+        self.assertTrue(unauthorized_body["exceptionInfo"].startswith("AUTH02: "))
+        query.assert_not_called()
+        self.assertEqual(len(log_model.values), 3)
+        self.assertEqual(log_model.values[-1]["code"], "AUTH02")
+
         fake_request.httprequest.headers["Authorization"] = "Bearer invalid-api09-token"
         with patch.object(validator_token, "request", fake_request), \
                 patch.object(api_logs, "request", fake_request), \
                 patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(rate_limiter, "request", fake_request), \
                 patch.object(api_logs.api, "Environment", side_effect=environment_factory), \
                 patch.object(ginlong_controller.services, "api09") as query:
-            unauthorized = endpoint.api09()
-        self.assertEqual(unauthorized.status_code, 401)
-        unauthorized_body = json.loads(unauthorized.get_data(as_text=True))
-        self.assertEqual(set(unauthorized_body), {"returnStatus", "exceptionInfo", "operationTime"})
-        self.assertTrue(unauthorized_body["exceptionInfo"].startswith("AUTH01: "))
+            unauthenticated = endpoint.api09()
+        self.assertEqual(unauthenticated.status_code, 401)
+        unauthenticated_body = json.loads(unauthenticated.get_data(as_text=True))
+        self.assertEqual(set(unauthenticated_body), {"returnStatus", "exceptionInfo", "operationTime"})
+        self.assertTrue(unauthenticated_body["exceptionInfo"].startswith("AUTH01: "))
         query.assert_not_called()
-        self.assertEqual(len(log_model.values), 3)
+        self.assertEqual(len(log_model.values), 4)
         self.assertEqual(log_model.values[-1]["code"], "AUTH01")
 
+        fake_request.api_user = self.api_user
         fake_request.httprequest.headers["Authorization"] = "Bearer " + token_value
         fake_request.httprequest.data = json.dumps({"owner": "OWNER-01"}).encode()
         with patch.object(validator_token, "request", fake_request), \
                 patch.object(api_logs, "request", fake_request), \
                 patch.object(ginlong_controller, "request", fake_request), \
+                patch.object(rate_limiter, "request", fake_request), \
+                patch.object(rate_limiter, "_reserve", return_value=True), \
                 patch.object(api_logs.api, "Environment", side_effect=environment_factory):
             invalid_request = endpoint.api09()
-        self.assertEqual(invalid_request.status_code, 400)
-        self.assertEqual(len(log_model.values), 4)
+        self.assertEqual(invalid_request.status_code, 200)
+        self.assertEqual(len(log_model.values), 5)
         self.assertEqual(log_model.values[-1]["code"], "REQ01")
         self.assertEqual(log_model.values[-1]["status"], "error")
         self.assertFalse(log_model.values[-1].get("source_record"))
@@ -3255,8 +4348,8 @@ class TestGinlongAPI(TransactionCase):
                 ]).unlink()
                 cr.commit()
 
-    def test_all_five_callbacks_send_real_http_and_replay_successful_events(self):
-        """用真实本地 HTTP 接收端逐项验证 API02/04/06/08/10 报文和幂等日志。"""
+    def test_all_five_callbacks_send_real_http_and_keep_api10_unchanged(self):
+        """验证 API02/04/06/08 的用户确认行为，且 API10 保持既有实现。"""
         receiver = _LocalGinlongReceiver()
         suffix = uuid.uuid4().hex[:10]
         params = self.env["ir.config_parameter"].sudo()
@@ -3264,22 +4357,12 @@ class TestGinlongAPI(TransactionCase):
         inbound_result = services.api01(self.env, self.api_user, self._api01("OUTBOUND-%s-IN" % suffix))
         inbound = self.env["world.depot.inbound.order"].browse(inbound_result["data"]["id"])
         inbound_picking, inbound_product = self._create_actual_picking(
-            inbound, incoming=True, suffix="HTTP-%s-IN" % suffix,
+            inbound, incoming=True, suffix="HTTP-%s-IN" % suffix, done=True,
         )
-        inbound_picking.ginlong_callback_selected = True
-        inbound_line = inbound_picking.move_line_ids
-        inbound_line.write({
-            "ginlong_operator_code": "http.receiving.operator",
-            "ginlong_operation_time": fields.Datetime.now(),
-        })
-        self.env["ginlong.inbound.receipt.detail"].create({
-            "order_id": inbound.id, "move_line_id": inbound_line.id, "receipt_status": "Y",
-        })
-
         outbound_result = services.api03(self.env, self.api_user, self._api03("OUTBOUND-%s-OUT" % suffix))
         outbound = self.env["world.depot.outbound.order"].browse(outbound_result["data"]["id"])
         outbound_picking, outbound_product = self._create_actual_picking(
-            outbound, incoming=False, suffix="HTTP-%s-OUT" % suffix,
+            outbound, incoming=False, suffix="HTTP-%s-OUT" % suffix, done=True,
         )
         outbound_picking.ginlong_callback_selected = True
         outbound_line = outbound_picking.move_line_ids
@@ -3292,27 +4375,19 @@ class TestGinlongAPI(TransactionCase):
         self.env["ginlong.outbound.shipment.detail"].create({
             "order_id": outbound.id, "move_line_id": outbound_line.id, "shipment_status": "Y",
         })
-
         count_order = self.env["world.depot.stocktake.order"].create({
             "count_order_no": "OUTBOUND-%s-COUNT" % suffix,
             "project_id": self.project.id, "owner_code": "OWNER-01", "warehouse_code": self.warehouse.code,
             "ginlong_api10_action": "Add",
         })
         self.env["world.depot.stocktake.result"].create({
-            "order_id": count_order.id,
-            "product_id": self.product.id,
-            "product_code": self.product.ginlong_product_code,
-            "product_name": self.product.name,
-            "specification_model": "GL-MODEL-1",
-            "serial_number": "HTTP-COUNT-SN-%s" % suffix,
-            "quantity": 1,
-            "pallet_code": "HTTP-COUNT-PALLET-%s" % suffix,
-            "operator_id": self.env.user.id,
-            "operation_time": fields.Datetime.now(),
-            "ginlong_operator_code": "http.counter",
-            "ginlong_callback_selected": True,
+            "order_id": count_order.id, "product_id": self.product.id,
+            "product_code": self.product.ginlong_product_code, "product_name": self.product.name,
+            "specification_model": "GL-MODEL-1", "serial_number": "HTTP-COUNT-SN-%s" % suffix,
+            "quantity": 1, "pallet_code": "HTTP-COUNT-PALLET-%s" % suffix,
+            "operator_id": self.env.user.id, "operation_time": fields.Datetime.now(),
+            "ginlong_operator_code": "http.counter", "ginlong_callback_selected": True,
         })
-
         callback_specs = [
             ("API02", inbound, "action_ginlong_api02"),
             ("API04", inbound, "action_ginlong_api04"),
@@ -3327,177 +4402,195 @@ class TestGinlongAPI(TransactionCase):
                 first = getattr(order, method_name)()
                 second = getattr(order, method_name)()
                 self.assertEqual(first["params"]["type"], "success")
-                self.assertEqual(second["params"]["type"], "success")
+                if api_code in {"API02", "API04", "API06", "API08"}:
+                    self.assertEqual(second["res_model"], "ginlong.api.callback.confirmation")
+                    wizard = self.env["ginlong.api.callback.confirmation"].browse(second["res_id"])
+                    if api_code in {"API04", "API06"}:
+                        wizard.action_cancel()
+                    else:
+                        wizard.action_confirm()
+                    third = getattr(order, method_name)()
+                    self.assertEqual(third["res_model"], "ginlong.api.callback.confirmation")
+                    wizard = self.env["ginlong.api.callback.confirmation"].browse(third["res_id"])
+                    if api_code in {"API02", "API08"}:
+                        wizard.action_cancel()
+                    else:
+                        wizard.action_confirm()
+                else:
+                    # API10 不属于本次变更，保持原有按钮行为。
+                    self.assertEqual(second["params"]["type"], "success")
 
-            self.assertEqual(len(receiver.records), 5)
-            received = {record["path"].strip("/"): record for record in receiver.records}
-            self.assertEqual(set(received), {"API02", "API04", "API06", "API08", "API10"})
+            received_counts = {}
+            for received_record in receiver.records:
+                received_counts[received_record["path"].strip("/")] = (
+                    received_counts.get(received_record["path"].strip("/"), 0) + 1
+                )
+            self.assertEqual(len(receiver.records), 9, received_counts)
+            received = {}
             for record in receiver.records:
                 self.assertEqual(record["headers"].get("Content-Type"), "application/json")
                 self.assertIsInstance(record["body"], dict)
-            self.assertEqual(received["API02"]["body"], {
+                received.setdefault(record["path"].strip("/"), []).append(record)
+            self.assertEqual(set(received), {"API02", "API04", "API06", "API08", "API10"})
+            self.assertEqual(received["API02"][0]["body"], {
                 "inboundOrderNo": inbound.reference, "action": "UPDATE", "receiptConfirmed": "Y",
             })
-            self.assertEqual(received["API04"]["body"]["action"], "CREATE")
-            self.assertEqual(received["API04"]["body"]["snList"][0]["productCode"], inbound_product.ginlong_product_code)
-            self.assertEqual(received["API06"]["body"]["action"], "CREATE")
-            self.assertEqual(received["API06"]["body"]["snList"][0]["operator"], "http.picking.operator")
-            self.assertEqual(received["API08"]["body"], {
+            self.assertEqual(received["API02"][1]["body"], received["API02"][0]["body"])
+            self.assertEqual(received["API04"][0]["body"]["action"], "CREATE")
+            self.assertEqual(received["API04"][0]["body"]["snList"][0]["productCode"], inbound_product.ginlong_product_code)
+            self.assertEqual(received["API06"][0]["body"]["action"], "CREATE")
+            self.assertEqual(received["API06"][0]["body"]["snList"][0]["operator"], "http.picking.operator")
+            self.assertEqual(received["API06"][1]["body"], received["API06"][0]["body"])
+            self.assertEqual(received["API08"][0]["body"], {
                 "outboundOrderNo": outbound.reference, "action": "CREATE", "shipmentConfirmed": "Y",
             })
-            self.assertEqual(received["API10"]["body"]["action"], "Add")
-            self.assertEqual(received["API10"]["body"]["snList"][0]["productSN"], "HTTP-COUNT-SN-%s" % suffix)
+            self.assertEqual(received["API10"][0]["body"]["action"], "Add")
+            self.assertEqual(received["API10"][0]["body"]["snList"][0]["productSN"], "HTTP-COUNT-SN-%s" % suffix)
 
+            # API10 仍按原实现每次按钮点击各写一条日志；第二次调用不增加外发 HTTP。
+            expected_logs = {"API02": 2, "API04": 2, "API06": 2, "API08": 2, "API10": 2}
             for api_code, order, _method_name in callback_specs:
                 endpoint = receiver.url + "/%s" % api_code
                 logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
-                self.assertEqual(len(logs), 2, api_code)
-                self.assertTrue(all(log.success for log in logs), api_code)
-                self.assertEqual(logs[0].source_record, order, api_code)
-                source_key = getattr(order, "reference", False) or getattr(order, "count_order_no", False)
-                event_context = {"source": {
-                    "model": order._name, "id": order.id, "business_key": source_key,
-                    "write_date": fields.Datetime.to_string(order.write_date) if order.write_date else "",
-                }}
-                event_key = idempotency._outbound_event_key(
-                    api_code, received[api_code]["body"], event_context,
-                    idempotency._api_rules(api_code),
-                )
-                row = self.env["ginlong.api.idempotency"].search([
-                    ("api_code", "=", api_code), ("direction", "=", "outbound"),
-                    ("event_key", "=", event_key),
-                ], limit=1)
-                self.assertTrue(row, api_code)
-                self.assertEqual(row.attempt_count, 1, api_code)
-                self.assertEqual(row.state, "succeeded", api_code)
+                self.assertEqual(len(logs), expected_logs[api_code], api_code)
+                if api_code in {"API02", "API04", "API06", "API08"}:
+                    self.assertTrue(all(row.success for row in logs), api_code)
+                    if api_code == "API04":
+                        self.assertEqual(logs[0].source_record, inbound_picking)
+                    else:
+                        self.assertTrue(all(row.source_record == order for row in logs), api_code)
+                    self.assertTrue(all(row.ginlong_idempotency_id for row in logs), api_code)
+                    events = logs.mapped("ginlong_idempotency_id")
+                    self.assertEqual(len(events), expected_logs[api_code], api_code)
+                    self.assertTrue(all(event.state == "succeeded" for event in events), api_code)
+                    self.assertEqual(
+                        len(events.filtered("parent_event_id")),
+                        1,
+                        api_code,
+                    )
+                else:
+                    self.assertTrue(all(row.source_record == count_order for row in logs), api_code)
         finally:
             receiver.close()
 
-    def test_outbound_timeout_is_unknown_then_retried_over_http_and_cached(self):
-        """模拟对端已收到但响应超时，验证 unknown 重试、成功缓存和逐次日志。"""
+    def test_outbound_timeout_requires_risk_confirmation_then_success_requires_repeat_confirmation(self):
+        """真实 loopback 验证未知结果和成功重复回传都需确认且确认后实际发送。"""
         receiver = _LocalGinlongReceiver(responses=[
             (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-19 12:00:00"}, 0.5),
         ])
         result = services.api01(self.env, self.api_user, self._api01("OUTBOUND-TIMEOUT-%s" % uuid.uuid4().hex[:8]))
         order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
-        picking, _product = self._create_actual_picking(order, incoming=True, suffix="OUTBOUND-TIMEOUT")
-        self.env["ginlong.inbound.receipt.detail"].create({
-            "order_id": order.id, "move_line_id": picking.move_line_ids.id, "receipt_status": "Y",
-        })
         endpoint = receiver.url + "/API02"
         self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
-        api_code = "API02"
-        event_payload = ginlong_callbacks._build_payload(api_code, order)
-        event_context = {"source": {
-            "model": order._name, "id": order.id, "business_key": order.reference,
-            "write_date": fields.Datetime.to_string(order.write_date),
-        }}
-        event_key = idempotency._outbound_event_key(
-            api_code, event_payload, event_context, idempotency._api_rules(api_code),
-        )
+        payload = ginlong_callbacks._build_payload("API02", order)
+        context = ginlong_callbacks._callback_context(order, "API02")
+        stable_key, fingerprint = idempotency.callback_event_identity("API02", payload, context)
         try:
-            def short_timeout_http_post(url, json, headers, timeout):
-                """绕过 Odoo 测试层最小请求超时，使用真实 socket 触发可控响应超时。"""
-                parts = urlsplit(url)
-                connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=timeout)
-                path = parts.path or "/"
-                if parts.query:
-                    path += "?" + parts.query
-                request_body = __import__("json").dumps(json, ensure_ascii=False).encode("utf-8")
-                try:
-                    connection.request("POST", path, body=request_body, headers=headers)
-                    response = connection.getresponse()
-                    response_text = response.read().decode("utf-8")
-                except (socket.timeout, TimeoutError) as error:
-                    connection.close()
-                    raise requests.Timeout(str(error)) from error
-                connection.close()
-                return SimpleNamespace(
-                    status_code=response.status,
-                    text=response_text,
-                    json=lambda: __import__("json").loads(response_text),
-                )
-
             with patch(
                 "odoo.addons.ginlong_apis.models.ginlong_callbacks.requests.post",
-                side_effect=short_timeout_http_post,
+                side_effect=lambda *args, **kwargs: self._short_timeout_post(*args, **kwargs),
             ), patch("odoo.addons.ginlong_apis.models.ginlong_callbacks._HTTP_TIMEOUT", 0.1):
                 first = order.action_ginlong_api02()
             self.assertEqual(first["params"]["type"], "danger")
-            self.assertTrue(receiver.wait_for_count(1, timeout=2), "timed-out HTTP request was not received")
-            row = self.env["ginlong.api.idempotency"].search([
-                ("api_code", "=", api_code), ("event_key", "=", event_key),
-            ], limit=1)
-            self.assertEqual(row.state, "unknown")
-            self.assertEqual(row.attempt_count, 1)
-
+            self.assertTrue(receiver.wait_for_count(1, timeout=2))
             time.sleep(0.55)
-            second = order.action_ginlong_api02()
-            third = order.action_ginlong_api02()
-            self.assertEqual(second["params"]["type"], "success")
-            self.assertEqual(third["params"]["type"], "success")
+
+            unknown_confirmation = order.action_ginlong_api02()
+            self.assertEqual(unknown_confirmation["res_model"], "ginlong.api.callback.confirmation")
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(unknown_confirmation["res_id"])
+            self.assertTrue(wizard.has_unknown)
+            self.assertEqual(len(receiver.records), 1)
+            wizard.confirm_unknown = True
+            retry_result = wizard.action_confirm()
+            self.assertEqual(retry_result["params"]["type"], "success")
             self.assertEqual(len(receiver.records), 2)
-            self.env.invalidate_all()
-            row = self.env["ginlong.api.idempotency"].search([
-                ("api_code", "=", api_code), ("event_key", "=", event_key),
-            ], limit=1)
-            self.assertEqual(row.state, "succeeded")
-            self.assertEqual(row.attempt_count, 2)
+
+            repeat_confirmation = order.action_ginlong_api02()
+            self.assertEqual(repeat_confirmation["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(len(receiver.records), 2)
+            repeat_wizard = self.env["ginlong.api.callback.confirmation"].browse(repeat_confirmation["res_id"])
+            repeat_wizard.scope = "all"
+            repeated_result = repeat_wizard.action_confirm()
+            self.assertEqual(repeated_result["params"]["type"], "success")
+            self.assertEqual(len(receiver.records), 3)
+
+            rows = self.env["ginlong.api.idempotency"].search([
+                ("api_code", "=", "API02"), ("stable_event_key", "=", stable_key),
+            ], order="id")
+            self.assertEqual([row.request_fingerprint for row in rows], [fingerprint] * 3)
+            self.assertEqual([row.state for row in rows], ["unknown", "succeeded", "succeeded"])
+            self.assertEqual(rows[2].parent_event_id, rows[1])
+            repeat_wizard.action_confirm()
+            self.assertEqual(len(receiver.records), 3, "同一向导重复确认不应再次发送")
             logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
             self.assertEqual(len(logs), 3)
-            self.assertFalse(logs[0].success)
-            self.assertTrue(logs[1].success and logs[2].success)
+            self.assertEqual([log.ginlong_idempotency_id for log in logs], list(rows))
+            self.assertTrue(all(log.success for log in logs[1:]))
         finally:
             receiver.close()
 
-    def test_outbound_http_failure_retries_same_event_then_caches_success(self):
-        """真实 HTTP 验证明确失败后以同一报文重试，并缓存随后成功结果。"""
+    def _short_timeout_post(self, *args, **kwargs):
+        """向本地 Mock 发起真实短超时请求，第一条响应可在客户端超时后到达。"""
+        url = args[0] if args else kwargs["url"]
+        parts = urlsplit(url)
+        connection = http.client.HTTPConnection(parts.hostname, parts.port, timeout=kwargs.get("timeout", 0.1))
+        body = json.dumps(kwargs.get("json"), ensure_ascii=False).encode("utf-8")
+        try:
+            connection.request("POST", parts.path or "/", body=body, headers=kwargs.get("headers", {}))
+            response = connection.getresponse()
+            text = response.read().decode("utf-8")
+        except (socket.timeout, TimeoutError) as error:
+            connection.close()
+            raise requests.Timeout(str(error)) from error
+        connection.close()
+        return SimpleNamespace(status_code=response.status, text=text, json=lambda: json.loads(text))
+
+    def test_outbound_http_failure_retries_then_requires_explicit_repeat_send(self):
+        """真实 HTTP 验证明确 Ginlong 拒绝可直接重试，成功重复发送必须经用户确认。"""
         receiver = _LocalGinlongReceiver(responses=[
             (503, {"returnStatus": "N", "exceptionInfo": "Retry later", "operationTime": "2026-11-19 12:00:00"}, 0),
             (200, {"returnStatus": "Y", "exceptionInfo": "OK", "operationTime": "2026-11-19 12:00:01"}, 0),
         ])
-        result = services.api01(
-            self.env, self.api_user,
-            self._api01("OUTBOUND-FAILURE-%s" % uuid.uuid4().hex[:8]),
-        )
+        result = services.api01(self.env, self.api_user, self._api01("OUTBOUND-FAILURE-%s" % uuid.uuid4().hex[:8]))
         order = self.env["world.depot.inbound.order"].browse(result["data"]["id"])
-        picking, _product = self._create_actual_picking(order, incoming=True, suffix="OUTBOUND-FAILURE")
-        self.env["ginlong.inbound.receipt.detail"].create({
-            "order_id": order.id, "move_line_id": picking.move_line_ids.id, "receipt_status": "Y",
-        })
         endpoint = receiver.url + "/API02"
         self.env["ir.config_parameter"].sudo().set_param("ginlong_apis.api02_callback_url", endpoint)
         payload = ginlong_callbacks._build_payload("API02", order)
-        context = {"source": {
-            "model": order._name, "id": order.id, "business_key": order.reference,
-            "write_date": fields.Datetime.to_string(order.write_date),
-        }}
-        event_key = idempotency._outbound_event_key(
-            "API02", payload, context, idempotency._api_rules("API02"),
+        stable_key, _fingerprint = idempotency.callback_event_identity(
+            "API02", payload, ginlong_callbacks._callback_context(order, "API02"),
         )
         try:
             first = order.action_ginlong_api02()
             second = order.action_ginlong_api02()
-            third = order.action_ginlong_api02()
             self.assertEqual(first["params"]["type"], "danger")
             self.assertEqual(second["params"]["type"], "success")
-            self.assertEqual(third["params"]["type"], "success")
             self.assertEqual(len(receiver.records), 2)
             self.assertEqual(receiver.records[0]["body"], payload)
             self.assertEqual(receiver.records[1]["body"], payload)
             self.assertEqual(receiver.records[0]["headers"].get("Content-Type"), "application/json")
-            row = self.env["ginlong.api.idempotency"].search([
-                ("api_code", "=", "API02"), ("event_key", "=", event_key),
-            ], limit=1)
-            self.assertEqual(row.state, "succeeded")
-            self.assertEqual(row.attempt_count, 2)
+
+            third = order.action_ginlong_api02()
+            self.assertEqual(third["res_model"], "ginlong.api.callback.confirmation")
+            self.assertEqual(len(receiver.records), 2)
+            wizard = self.env["ginlong.api.callback.confirmation"].browse(third["res_id"])
+            wizard.scope = "all"
+            wizard.action_confirm()
+            self.assertEqual(len(receiver.records), 3)
+            rows = self.env["ginlong.api.idempotency"].search([
+                ("api_code", "=", "API02"), ("stable_event_key", "=", stable_key),
+            ], order="id")
+            self.assertEqual(len(rows), 3)
+            self.assertEqual([row.state for row in rows], ["failed", "succeeded", "succeeded"])
+            self.assertTrue(all(row.attempt_count == 1 for row in rows))
+            self.assertEqual(rows[1].parent_event_id, rows[0])
+            self.assertEqual(rows[2].parent_event_id, rows[1])
             logs = self.env["world.depot.api.log"].search([("request_path", "=", endpoint)], order="id")
             self.assertEqual(len(logs), 3)
             self.assertFalse(logs[0].success)
             self.assertTrue(logs[1].success and logs[2].success)
+            self.assertEqual(logs[2].ginlong_idempotency_id, rows[2])
         finally:
             receiver.close()
-
 
     def test_ginlong_effective_identity_constraints_and_archived_product_restore(self):
         """验证有效身份约束、取消释放全局单号及归档产品恢复原变体。"""
@@ -3909,6 +5002,59 @@ class TestGinlongAPI(TransactionCase):
                     env["res.partner"].sudo().browse(fixture_ids.get("owner")).unlink()
                 cr.commit()
 
+    def test_cc012_api_log_commits_independently_and_is_cleaned_by_orm(self):
+        """验证 API Log 使用独立 ORM 事务提交，并在测试结束前按测试标识清理。"""
+        marker = "GINLONG-CC012-LOG-%s" % uuid.uuid4().hex
+        test_case = self
+
+        class IndependentRegistry:
+            """将日志装饰器的新游标请求接到真实独立 ORM 游标。"""
+
+            def cursor(self):
+                """返回与当前测试事务隔离的 Odoo 数据库游标。"""
+                return test_case._new_committed_cursor(test_case.env.cr.dbname)
+
+        fake_request = SimpleNamespace(
+            httprequest=SimpleNamespace(
+                data=json.dumps({"testMarker": marker}).encode("utf-8"),
+                remote_addr="127.0.0.1",
+                path="/api/ginlong/TPL_Product_Master",
+            ),
+            env=self.env,
+            registry=IndependentRegistry(),
+            api_user=False,
+            ginlong_api_error_log=None,
+        )
+
+        @api_logs.api_logger
+        def successful_response():
+            """返回一个仅供日志事务集成断言使用的成功协议响应。"""
+            return {"success": True, "returnStatus": "Y", "exceptionInfo": "OK"}
+
+        try:
+            with patch.object(api_logs, "request", fake_request):
+                response = successful_response()
+            self.assertEqual(response["returnStatus"], "Y")
+            # 新连接立即可见该记录，证明日志提交独立于当前测试用例事务。
+            with self._new_committed_cursor(self.env.cr.dbname) as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {})
+                logs = env["world.depot.api.log"].sudo().search([
+                    ("request_data", "ilike", marker),
+                ])
+                self.assertEqual(len(logs), 1)
+                self.assertEqual(logs.ginlong_api_code, "API07")
+                self.assertEqual(logs.status, "success")
+                self.assertTrue(logs.success)
+                self.assertIn('"returnStatus": "Y"', logs.response_data)
+        finally:
+            # 独立日志已提交，故必须通过 ORM 显式删除本测试唯一标记的记录。
+            with self._new_committed_cursor(self.env.cr.dbname) as cr:
+                env = api.Environment(cr, SUPERUSER_ID, {})
+                env["world.depot.api.log"].sudo().search([
+                    ("request_data", "ilike", marker),
+                ]).unlink()
+                cr.commit()
+
 
 @tagged("post_install", "-at_install")
 class TestGinlongHttpAPI(HttpCase):
@@ -3988,11 +5134,14 @@ class TestGinlongHttpAPI(HttpCase):
     def tearDown(self):
         """使用 ORM 清除独立事务写入的测试日志和共享限流计数。"""
         dbname = self.env.cr.dbname
+        # 多个唯一标记用 OR 查询，覆盖主链单号及不携带主标记的 API09 owner 编码。
+        log_domain = ["|"] * (len(self.http_log_markers) - 1)
+        log_domain.extend(
+            ("request_data", "ilike", marker) for marker in self.http_log_markers
+        )
         with db_connect(dbname).cursor() as cr:
             env = api.Environment(cr, SUPERUSER_ID, {})
-            env["world.depot.api.log"].sudo().search([
-                ("request_data", "ilike", self.http_test_marker),
-            ]).unlink()
+            env["world.depot.api.log"].sudo().search(log_domain).unlink()
             env["ginlong.api.idempotency"].sudo().search([
                 ("business_key", "ilike", self.http_test_marker),
             ]).unlink()
@@ -4000,16 +5149,30 @@ class TestGinlongHttpAPI(HttpCase):
                 ("api_user_id", "=", self.http_api_user.id),
             ]).unlink()
             cr.commit()
+            self.assertEqual(
+                env["world.depot.api.log"].sudo().search_count(log_domain), 0,
+                "自动化测试独立提交的 API Log 必须按唯一测试标记清零",
+            )
+            self.assertEqual(
+                env["ginlong.api.rate.counter"].sudo().search_count([
+                    ("api_user_id", "=", self.http_api_user.id),
+                ]), 0,
+                "自动化测试的独立限流计数不得遗留",
+            )
         super().tearDown()
 
     def _post(self, path, payload):
         """通过 Odoo HTTP 测试 Server POST Ginlong JSON 并携带真实 Bearer Token。"""
+        return self._post_with_token(path, payload, self.http_token)
+
+    def _post_with_token(self, path, payload, token):
+        """通过真实 Odoo HTTP 路由使用指定 Token 发送 JSON 请求。"""
         return self.url_open(
             path,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer %s" % self.http_token,
+                "Authorization": "Bearer %s" % token,
             },
         )
 
@@ -4892,8 +6055,8 @@ class TestGinlongHttpAPI(HttpCase):
                 "specificationModel": "HTTP-MODEL", "quantity": 2,
             }],
         }
-        first_response = self._post("/api/ginlong/TPL_Pending_Receipt_Note", payload)
-        second_response = self._post("/api/ginlong/TPL_Pending_Receipt_Note", payload)
+        first_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", payload)
+        second_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", payload)
         first, second = json.loads(first_response.text), json.loads(second_response.text)
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 200)
@@ -4941,23 +6104,38 @@ class TestGinlongHttpAPI(HttpCase):
             "inboundOrderNo": reference, "warehouse": self.http_warehouse.code,
             "businessType": "STANDARD", "remark": marker,
         }
-        delete_first = self._post("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
-        delete_second = self._post("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
+        delete_first = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
+        delete_second = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
         self.assertEqual(delete_first.status_code, 200)
-        self.assertEqual(json.loads(delete_first.text), json.loads(delete_second.text))
+        self.assertEqual(json.loads(delete_first.text)["returnStatus"], "Y")
+        delete_second_body = json.loads(delete_second.text)
+        self.assertEqual(delete_second_body["returnStatus"], "N")
+        self.assertEqual(delete_second_body["exceptionInfo"], "BUS01: 有效订单不存在或已取消")
+        changed_delete_payload = dict(delete_payload, remark=marker + " changed after cancellation")
+        changed_delete = self._post_with_rate_reset(
+            "/api/ginlong/TPL_Pending_Receipt_Note", changed_delete_payload,
+        )
+        self.assertEqual(json.loads(changed_delete.text)["returnStatus"], "N")
+        self.assertEqual(
+            json.loads(changed_delete.text)["exceptionInfo"],
+            "BUS01: 有效订单不存在或已取消",
+        )
         self.env.invalidate_all()
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API01"), ("business_key", "=", reference), ("action", "=", "del"),
+        ]), 1)
 
         # 取消后先用相同报文开启新生命周期，再取消并用不同报文再次创建。
-        same_payload_re_add = self._post("/api/ginlong/TPL_Pending_Receipt_Note", payload)
+        same_payload_re_add = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", payload)
         self.assertEqual(json.loads(same_payload_re_add.text)["returnStatus"], "Y")
         self.env.invalidate_all()
         same_lifecycle_order = self.env["world.depot.inbound.order"].search([
             ("reference", "=", reference), ("state", "!=", "cancel"),
         ])
         self.assertEqual(len(same_lifecycle_order), 1)
-        second_delete = self._post("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
+        second_delete = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", delete_payload)
         self.assertEqual(json.loads(second_delete.text)["returnStatus"], "Y")
         self.env.invalidate_all()
         self.assertEqual(same_lifecycle_order.state, "cancel")
@@ -4965,15 +6143,30 @@ class TestGinlongHttpAPI(HttpCase):
         re_add_payload = deepcopy(payload)
         re_add_payload["remark"] = marker + " after delete"
         re_add_payload["details"][0]["quantity"] = 9
-        re_add_response = self._post("/api/ginlong/TPL_Pending_Receipt_Note", re_add_payload)
+        re_add_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", re_add_payload)
         re_add_body = json.loads(re_add_response.text)
         self.assertEqual(re_add_response.status_code, 200)
         self.assertEqual(re_add_body["returnStatus"], "Y")
         self.assertEqual(re_add_body["exceptionInfo"], "OK")
-        repeated_re_add = self._post("/api/ginlong/TPL_Pending_Receipt_Note", re_add_payload)
+        repeated_re_add = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", re_add_payload)
         self.assertEqual(json.loads(repeated_re_add.text)["returnStatus"], "N")
         self.assertEqual(json.loads(repeated_re_add.text)["exceptionInfo"],
                          "IDM02: 重复新增，冲突键: inboundOrderNo")
+        # 不同 Payload 开启的新周期也必须能通过 Del 取消，并保留其独立历史记录。
+        changed_lifecycle_delete = self._post_with_rate_reset(
+            "/api/ginlong/TPL_Pending_Receipt_Note", delete_payload,
+        )
+        repeated_changed_delete = self._post_with_rate_reset(
+            "/api/ginlong/TPL_Pending_Receipt_Note", delete_payload,
+        )
+        self.assertEqual(changed_lifecycle_delete.status_code, 200)
+        self.assertEqual(json.loads(changed_lifecycle_delete.text)["returnStatus"], "Y")
+        repeated_changed_delete_body = json.loads(repeated_changed_delete.text)
+        self.assertEqual(repeated_changed_delete_body["returnStatus"], "N")
+        self.assertEqual(
+            repeated_changed_delete_body["exceptionInfo"],
+            "BUS01: 有效订单不存在或已取消",
+        )
         self.env.invalidate_all()
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
@@ -4984,19 +6177,28 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(len(lifecycle_orders), 3)
         self.assertEqual(lifecycle_orders[0].state, "cancel")
         self.assertEqual(lifecycle_orders[1].state, "cancel")
-        self.assertEqual(lifecycle_orders[2].state, "new")
+        self.assertEqual(lifecycle_orders[2].state, "cancel")
         self.assertEqual(lifecycle_orders[2].remark, marker + " after delete")
+        self.assertEqual(
+            lifecycle_orders[2].inbound_order_product_ids[0]
+            .inbound_order_product_pallet_ids[0].quantity,
+            9,
+        )
+        self.assertTrue(all(not record.ginlong_effective_reference for record in lifecycle_orders))
+        self.assertEqual(self.env["world.depot.inbound.order"].search_count([
+            ("reference", "=", reference), ("state", "!=", "cancel"),
+        ]), 0)
         self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
             ("api_code", "=", "API01"), ("business_key", "=", reference), ("action", "=", "add"),
         ]), 3)
         self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
             ("api_code", "=", "API01"), ("business_key", "=", reference), ("action", "=", "del"),
-        ]), 2)
+        ]), 3)
 
         invalid = deepcopy(payload)
         invalid["inboundOrderNo"] = marker + "-INVALID"
         invalid["details"][0].pop("productName")
-        invalid_response = self._post("/api/ginlong/TPL_Pending_Receipt_Note", invalid)
+        invalid_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", invalid)
         self.assertEqual(invalid_response.status_code, 200)
         invalid_body = json.loads(invalid_response.text)
         self.assertEqual(set(invalid_body), {"returnStatus", "exceptionInfo", "operationTime"})
@@ -5010,7 +6212,7 @@ class TestGinlongHttpAPI(HttpCase):
         invalid_type = deepcopy(payload)
         invalid_type["inboundOrderNo"] = marker + "-INVALID-TYPE"
         invalid_type["details"][0]["quantity"] = "not-a-number"
-        type_response = self._post("/api/ginlong/TPL_Pending_Receipt_Note", invalid_type)
+        type_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Receipt_Note", invalid_type)
         type_body = json.loads(type_response.text)
         self.assertEqual(type_response.status_code, 200)
         self.assertEqual(set(type_body), {"returnStatus", "exceptionInfo", "operationTime"})
@@ -5067,8 +6269,11 @@ class TestGinlongHttpAPI(HttpCase):
         duplicate_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", payload)
         first, duplicate = json.loads(first_response.text), json.loads(duplicate_response.text)
         self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(duplicate_response.status_code, 400)
-        self.assertTrue(first["success"])
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertEqual(set(first), {"returnStatus", "exceptionInfo", "operationTime"})
+        self.assertEqual(first["returnStatus"], "Y")
+        self.assertEqual(first["exceptionInfo"], "OK")
+        self.assertEqual(set(duplicate), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(duplicate["returnStatus"], "N")
         self.assertEqual(duplicate["exceptionInfo"],
                          "IDM02: 重复新增，冲突键: outboundOrderNo")
@@ -5083,14 +6288,16 @@ class TestGinlongHttpAPI(HttpCase):
         repeated_edit = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", edit)
         self.assertEqual(first_edit.status_code, 200)
         self.assertEqual(repeated_edit.status_code, 200)
-        self.assertTrue(json.loads(first_edit.text)["success"])
-        self.assertTrue(json.loads(repeated_edit.text)["success"])
+        for response in (first_edit, repeated_edit):
+            edit_body = json.loads(response.text)
+            self.assertEqual(set(edit_body), {"returnStatus", "exceptionInfo", "operationTime"})
+            self.assertEqual(edit_body["returnStatus"], "Y")
 
         invalid_pair = deepcopy(payload)
         invalid_pair.update({"owner": marker + "-UNKNOWN-OWNER", "outboundOrderNo": marker + "-REJECT"})
         invalid_pair["details"][0]["productCode"] = marker + "-UNKNOWN-PRODUCT"
         rejected = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
-        self.assertEqual(rejected.status_code, 400)
+        self.assertEqual(rejected.status_code, 200)
         rejected_body = json.loads(rejected.text)
         self.assertEqual(set(rejected_body), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(rejected_body["returnStatus"], "N")
@@ -5118,8 +6325,8 @@ class TestGinlongHttpAPI(HttpCase):
         retried = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
         repeated_retry = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", invalid_pair)
         self.assertEqual(retried.status_code, 200)
-        self.assertTrue(json.loads(retried.text)["success"])
-        self.assertEqual(repeated_retry.status_code, 400)
+        self.assertEqual(json.loads(retried.text)["returnStatus"], "Y")
+        self.assertEqual(repeated_retry.status_code, 200)
         self.assertEqual(json.loads(repeated_retry.text)["exceptionInfo"],
                          "IDM02: 重复新增，冲突键: outboundOrderNo")
         self.env.invalidate_all()
@@ -5138,17 +6345,38 @@ class TestGinlongHttpAPI(HttpCase):
             "businessType": "STANDARD", "remark": marker,
         }
         delete_first = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
-        delete_replay = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
+        repeated_delete = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
         self.assertEqual(delete_first.status_code, 200)
-        self.assertEqual(json.loads(delete_first.text), json.loads(delete_replay.text))
+        self.assertEqual(json.loads(delete_first.text)["returnStatus"], "Y")
+        repeated_delete_body = json.loads(repeated_delete.text)
+        self.assertEqual(repeated_delete_body["returnStatus"], "N")
+        self.assertEqual(repeated_delete_body["exceptionInfo"], "BUS01: 有效订单不存在或已取消")
+        changed_delete = dict(delete, remark=marker + " changed after cancellation")
+        changed_delete_response = self._post_with_rate_reset(
+            "/api/ginlong/TPL_Pending_Delivery_Note", changed_delete,
+        )
+        self.assertEqual(json.loads(changed_delete_response.text)["returnStatus"], "N")
+        self.assertEqual(
+            json.loads(changed_delete_response.text)["exceptionInfo"],
+            "BUS01: 有效订单不存在或已取消",
+        )
         self.env.invalidate_all()
         self.assertTrue(order.exists())
+        self.assertEqual(order.state, "cancel")
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API03"), ("business_key", "=", reference), ("action", "=", "del"),
+        ]), 1)
+        edit_cancelled = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", edit)
+        edit_cancelled_body = json.loads(edit_cancelled.text)
+        self.assertEqual(edit_cancelled_body["returnStatus"], "N")
+        self.assertTrue(edit_cancelled_body["exceptionInfo"].startswith("BUS01: "))
+        self.env.invalidate_all()
         self.assertEqual(order.state, "cancel")
 
         same_payload_re_add = self._post_with_rate_reset(
             "/api/ginlong/TPL_Pending_Delivery_Note", payload,
         )
-        self.assertTrue(json.loads(same_payload_re_add.text)["success"])
+        self.assertEqual(json.loads(same_payload_re_add.text)["returnStatus"], "Y")
         second_delete = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
         self.assertEqual(json.loads(second_delete.text)["returnStatus"], "Y")
         self.env.invalidate_all()
@@ -5160,9 +6388,9 @@ class TestGinlongHttpAPI(HttpCase):
 
         re_add = dict(payload, remark=marker + " after cancel")
         re_add_response = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", re_add)
-        self.assertTrue(json.loads(re_add_response.text)["success"])
+        self.assertEqual(json.loads(re_add_response.text)["returnStatus"], "Y")
         repeated_re_add = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", re_add)
-        self.assertEqual(repeated_re_add.status_code, 400)
+        self.assertEqual(repeated_re_add.status_code, 200)
         self.assertEqual(json.loads(repeated_re_add.text)["exceptionInfo"],
                          "IDM02: 重复新增，冲突键: outboundOrderNo")
         self.env.invalidate_all()
@@ -5173,6 +6401,10 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(lifecycle_orders[0].state, "cancel")
         self.assertEqual(lifecycle_orders[1].state, "cancel")
         self.assertNotEqual(lifecycle_orders[2].state, "cancel")
+        final_delete = self._post_with_rate_reset("/api/ginlong/TPL_Pending_Delivery_Note", delete)
+        self.assertEqual(json.loads(final_delete.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        self.assertEqual(lifecycle_orders[2].state, "cancel")
 
     def test_http_api05_add_repeatable_edit_and_delete(self):
         """真实 HTTP 验证 API05 指令 Add/重复 Edit/Delete 的 ORM 结果。"""
@@ -5202,11 +6434,14 @@ class TestGinlongHttpAPI(HttpCase):
                 "specificationModel": self.http_serial_product.product_tmpl_id.ginlong_specification_model,
             }],
         }
-        first_response = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
-        duplicate_response = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
+        first_response = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", payload)
+        duplicate_response = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", payload)
         first, duplicate = json.loads(first_response.text), json.loads(duplicate_response.text)
         self.assertEqual(first_response.status_code, 200)
-        self.assertTrue(first["success"])
+        self.assertEqual(set(first), {"returnStatus", "exceptionInfo", "operationTime"})
+        self.assertEqual(first["returnStatus"], "Y")
+        self.assertEqual(first["exceptionInfo"], "OK")
+        self.assertEqual(set(duplicate), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(duplicate["returnStatus"], "N")
         self.assertEqual(duplicate["exceptionInfo"], "IDM02: 重复新增，冲突键: countOrderNo")
         self.env.invalidate_all()
@@ -5215,10 +6450,12 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(order.get_plan_details(), payload["details"])
         self.assertEqual(order.get_plan_sn_list(), payload["snList"])
         edit = dict(payload, action="Edit", remark=marker + "-EDIT")
-        edit_first = self._post("/api/ginlong/TPL_Stocktake_Order", edit)
-        edit_second = self._post("/api/ginlong/TPL_Stocktake_Order", edit)
-        self.assertTrue(json.loads(edit_first.text)["success"])
-        self.assertTrue(json.loads(edit_second.text)["success"])
+        edit_first = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", edit)
+        edit_second = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", edit)
+        for response in (edit_first, edit_second):
+            edit_body = json.loads(response.text)
+            self.assertEqual(set(edit_body), {"returnStatus", "exceptionInfo", "operationTime"})
+            self.assertEqual(edit_body["returnStatus"], "Y")
         self.env.invalidate_all()
         self.assertEqual(order.remark, marker + "-EDIT")
         delete = {
@@ -5226,16 +6463,37 @@ class TestGinlongHttpAPI(HttpCase):
             "countOrderNo": count_order_no, "warehouse": self.http_warehouse.code,
             "remark": marker,
         }
-        delete_first = self._post("/api/ginlong/TPL_Stocktake_Order", delete)
-        delete_second = self._post("/api/ginlong/TPL_Stocktake_Order", delete)
-        self.assertEqual(json.loads(delete_first.text), json.loads(delete_second.text))
+        delete_first = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", delete)
+        repeated_delete = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", delete)
+        self.assertEqual(json.loads(delete_first.text)["returnStatus"], "Y")
+        repeated_delete_body = json.loads(repeated_delete.text)
+        self.assertEqual(repeated_delete_body["returnStatus"], "N")
+        self.assertEqual(repeated_delete_body["exceptionInfo"], "BUS01: 有效订单不存在或已取消")
+        changed_delete = dict(delete, remark=marker + " changed after cancellation")
+        changed_delete_response = self._post_with_rate_reset(
+            "/api/ginlong/TPL_Stocktake_Order", changed_delete,
+        )
+        self.assertEqual(json.loads(changed_delete_response.text)["returnStatus"], "N")
+        self.assertEqual(
+            json.loads(changed_delete_response.text)["exceptionInfo"],
+            "BUS01: 有效订单不存在或已取消",
+        )
         self.env.invalidate_all()
         self.assertTrue(order.exists())
         self.assertEqual(order.state, "cancel")
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API05"), ("business_key", "=", count_order_no), ("action", "=", "del"),
+        ]), 1)
+        edit_cancelled = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", edit)
+        edit_cancelled_body = json.loads(edit_cancelled.text)
+        self.assertEqual(edit_cancelled_body["returnStatus"], "N")
+        self.assertTrue(edit_cancelled_body["exceptionInfo"].startswith("BUS01: "))
+        self.env.invalidate_all()
+        self.assertEqual(order.state, "cancel")
 
-        same_payload_re_add = self._post("/api/ginlong/TPL_Stocktake_Order", payload)
-        self.assertTrue(json.loads(same_payload_re_add.text)["success"])
-        second_delete = self._post("/api/ginlong/TPL_Stocktake_Order", delete)
+        same_payload_re_add = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", payload)
+        self.assertEqual(json.loads(same_payload_re_add.text)["returnStatus"], "Y")
+        second_delete = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", delete)
         self.assertEqual(json.loads(second_delete.text)["returnStatus"], "Y")
         self.env.invalidate_all()
         lifecycles = self.env["world.depot.stocktake.order"].search([
@@ -5246,9 +6504,9 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(lifecycles[1].state, "cancel")
 
         re_add_payload = dict(payload, remark=marker + " re-added with changed payload")
-        re_add_response = self._post("/api/ginlong/TPL_Stocktake_Order", re_add_payload)
-        self.assertTrue(json.loads(re_add_response.text)["success"])
-        repeat_re_add = self._post("/api/ginlong/TPL_Stocktake_Order", re_add_payload)
+        re_add_response = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", re_add_payload)
+        self.assertEqual(json.loads(re_add_response.text)["returnStatus"], "Y")
+        repeat_re_add = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", re_add_payload)
         self.assertEqual(json.loads(repeat_re_add.text)["returnStatus"], "N")
         self.env.invalidate_all()
         lifecycles = self.env["world.depot.stocktake.order"].search([
@@ -5258,6 +6516,13 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(lifecycles[0].state, "cancel")
         self.assertEqual(lifecycles[1].state, "cancel")
         self.assertNotEqual(lifecycles[2].state, "cancel")
+        final_delete = self._post_with_rate_reset("/api/ginlong/TPL_Stocktake_Order", delete)
+        self.assertEqual(json.loads(final_delete.text)["returnStatus"], "Y")
+        self.env.invalidate_all()
+        self.assertEqual(lifecycles[2].state, "cancel")
+        self.assertEqual(self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API05"), ("business_key", "=", count_order_no), ("action", "=", "del"),
+        ]), 3)
 
     def test_http_api07_add_duplicate_rejection_and_repeatable_edit(self):
         """真实 HTTP 验证 API07 重复 Add 拒绝、Edit 可重复执行和跨货主新增。"""
@@ -5817,7 +7082,7 @@ class TestGinlongHttpAPI(HttpCase):
         with patch.object(rate_limiter, "_reserve", side_effect=RuntimeError("private-storage-detail")):
             unavailable = self._post("/api/ginlong/TPL_Pending_Receipt_Note", storage_payload)
         unavailable_body = json.loads(unavailable.text)
-        self.assertEqual(unavailable.status_code, 503)
+        self.assertEqual(unavailable.status_code, 500)
         self.assertEqual(set(unavailable_body), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(unavailable_body["exceptionInfo"], "RATE02: 限流服务暂不可用")
         self.assertNotIn("private-storage-detail", unavailable.text)
@@ -5834,8 +7099,8 @@ class TestGinlongHttpAPI(HttpCase):
         self.assertEqual(storage_logs[0]["msg"], "限流服务暂不可用")
         self.assertIn("private-storage-detail", storage_logs[0]["exception_details"])
 
-    def test_http_api07_unexpected_business_error_is_sanitized_and_logged(self):
-        """真实 HTTP 验证未预期业务异常返回 SYS01 且日志保留诊断。"""
+    def test_http_api07_unexpected_system_error_is_sanitized_and_logged(self):
+        """真实 HTTP 验证未预期系统异常返回 500/SYS01 且日志保留诊断。"""
         marker = self.http_test_marker
         product_code = marker + "-SYSTEM-ERROR"
         payload = {
@@ -5850,7 +7115,7 @@ class TestGinlongHttpAPI(HttpCase):
         with patch.object(services, "api07", side_effect=RuntimeError("private-system-detail")):
             response = self._post("/api/ginlong/TPL_Product_Master", payload)
         body = json.loads(response.text)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 500)
         self.assertEqual(set(body), {"returnStatus", "exceptionInfo", "operationTime"})
         self.assertEqual(body["exceptionInfo"], "SYS01: 系统处理失败")
         self.assertNotIn("private-system-detail", response.text)
@@ -5924,6 +7189,14 @@ class TestGinlongHttpAPI(HttpCase):
         first_body, second_body = json.loads(first.text), json.loads(second.text)
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.status_code, 200)
+        self.assertEqual(
+            set(first_body),
+            {"returnStatus", "exceptionInfo", "operationTime", "owner", "warehouse", "inventoryList"},
+        )
+        self.assertEqual(
+            set(second_body),
+            {"returnStatus", "exceptionInfo", "operationTime", "owner", "warehouse", "inventoryList"},
+        )
         self.assertEqual(first_body["owner"], owner_code)
         self.assertEqual(first_body["warehouse"], self.http_warehouse.code)
         self.assertEqual(first_body["inventoryList"], [])
@@ -5940,5 +7213,688 @@ class TestGinlongHttpAPI(HttpCase):
         missing_warehouse = self._post("/api/ginlong/TPL_Stock_Query", {
             "owner": owner_code, "warehouse": owner_code + "-UNKNOWN-WH",
         })
-        self.assertEqual(missing_warehouse.status_code, 400)
+        self.assertEqual(missing_warehouse.status_code, 200)
         self.assertFalse(json.loads(missing_warehouse.text).get("inventoryList"))
+
+        orphan_user = self.env["res.users"].with_context(no_reset_password=True).create({
+            "name": "Ginlong API09 HTTP user without API User",
+            "login": "ginlong-api09-http-orphan-%s" % uuid.uuid4().hex,
+            "groups_id": [(6, 0, [self.env.ref("base.group_user").id])],
+        })
+        orphan_token = "ginlong-http-orphan-token-%s" % uuid.uuid4().hex
+        self.env["world.depot.api.token"].create({
+            "user_id": orphan_user.id,
+            "token": orphan_token,
+            "expires": fields.Datetime.now() + timedelta(hours=1),
+        })
+        denied = self._post_with_token("/api/ginlong/TPL_Stock_Query", payload, orphan_token)
+        denied_body = json.loads(denied.text)
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(set(denied_body), {"returnStatus", "exceptionInfo", "operationTime"})
+        self.assertTrue(denied_body["exceptionInfo"].startswith("AUTH02: "))
+        self.assertNotIn("inventoryList", denied_body)
+        auth_logs = [
+            log for log in self._committed_api_logs(owner_code) if log["code"] == "AUTH02"
+        ]
+        self.assertTrue(auth_logs)
+        self.assertFalse(any(log["success"] for log in auth_logs))
+
+    def test_http_api09_rate_limit_uses_own_config_and_protocol_error(self):
+        """真实 HTTP 验证 API09 使用独立限流入口并返回 V3.2 错误体。"""
+        owner_code = self.http_test_marker + "-RATE-OWNER"
+        self.env["res.partner"].create({
+            "name": "Ginlong API09 rate owner", "is_company": True,
+            "ginlong_owner_code": owner_code,
+        })
+        payload = {"owner": owner_code, "warehouse": self.http_warehouse.code}
+        idempotency_count = self.env["ginlong.api.idempotency"].search_count([
+            ("api_code", "=", "API09"),
+        ])
+        # 只替换共享计数器结果，HTTP 仍通过真实 Odoo 路由、装饰器和日志组件。
+        with patch.object(rate_limiter, "_reserve", return_value=False):
+            response = self._post("/api/ginlong/TPL_Stock_Query", payload)
+        body = json.loads(response.text)
+        self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get("Retry-After"))
+        self.assertEqual(set(body), {"returnStatus", "exceptionInfo", "operationTime"})
+        self.assertEqual(body["exceptionInfo"], "RATE01: API请求频率超限")
+        self.assertEqual(
+            self.env["ginlong.api.idempotency"].search_count([("api_code", "=", "API09")]),
+            idempotency_count,
+        )
+        logs = self._committed_api_logs(owner_code)
+        self.assertTrue(any(
+            log["code"] == "RATE01" and log["status"] == "error" and not log["success"]
+            for log in logs
+        ))
+
+    def test_http_all_inbound_apis_reject_invalid_and_expired_tokens(self):
+        """通过五个真实 HTTP 路由验证无效及过期 Token 均返回统一 401。"""
+        expired_token = "ginlong-expired-token-%s" % uuid.uuid4().hex
+        self.env["world.depot.api.token"].create({
+            "user_id": self.http_api_user.user_id.id,
+            "token": expired_token,
+            "expires": fields.Datetime.now() - timedelta(minutes=1),
+        })
+        routes = (
+            "/api/ginlong/TPL_Pending_Receipt_Note",
+            "/api/ginlong/TPL_Pending_Delivery_Note",
+            "/api/ginlong/TPL_Stocktake_Order",
+            "/api/ginlong/TPL_Product_Master",
+            "/api/ginlong/TPL_Stock_Query",
+        )
+        for route in routes:
+            for token in ("invalid-ginlong-token", expired_token):
+                with self.subTest(route=route, expired=token == expired_token):
+                    response = self._post_with_token(
+                        route, {"testMarker": self.http_test_marker}, token,
+                    )
+                    body = json.loads(response.text)
+                    self.assertEqual(response.status_code, 401)
+                    self.assertEqual(
+                        set(body), {"returnStatus", "exceptionInfo", "operationTime"},
+                    )
+                    self.assertEqual(body["returnStatus"], "N")
+                    self.assertTrue(body["exceptionInfo"].startswith("AUTH01: "))
+
+        logs = self._committed_api_logs(self.http_test_marker)
+        self.assertEqual(len(logs), len(routes) * 2)
+        self.assertTrue(all(
+            log["code"] == "AUTH01" and log["status"] == "error" and not log["success"]
+            for log in logs
+        ))
+
+    def test_http_all_inbound_apis_require_an_api_user_before_business_processing(self):
+        """通过五个真实 HTTP 路由验证 Token 用户必须关联 API User 才能访问。"""
+        orphan_user = self.env["res.users"].with_context(no_reset_password=True).create({
+            "name": "Ginlong API user prerequisite HTTP user",
+            "login": "ginlong-no-api-user-%s" % uuid.uuid4().hex,
+            "groups_id": [(6, 0, [self.env.ref("base.group_user").id])],
+        })
+        orphan_token = "ginlong-no-api-user-token-%s" % uuid.uuid4().hex
+        self.env["world.depot.api.token"].create({
+            "user_id": orphan_user.id,
+            "token": orphan_token,
+            "expires": fields.Datetime.now() + timedelta(hours=1),
+        })
+        routes = (
+            "/api/ginlong/TPL_Pending_Receipt_Note",
+            "/api/ginlong/TPL_Pending_Delivery_Note",
+            "/api/ginlong/TPL_Stocktake_Order",
+            "/api/ginlong/TPL_Product_Master",
+            "/api/ginlong/TPL_Stock_Query",
+        )
+        # 用无效但可解析的请求体，验证 API User 前置检查优先于字段校验和业务处理。
+        before = {
+            model: self.env[model].sudo().search_count([])
+            for model in (
+                "world.depot.inbound.order",
+                "world.depot.outbound.order",
+                "world.depot.stocktake.order",
+                "product.product",
+                "ginlong.api.idempotency",
+            )
+        }
+        for route in routes:
+            with self.subTest(route=route):
+                response = self._post_with_token(
+                    route, {"testMarker": self.http_test_marker}, orphan_token,
+                )
+                body = json.loads(response.text)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(
+                    set(body), {"returnStatus", "exceptionInfo", "operationTime"},
+                )
+                self.assertEqual(body["returnStatus"], "N")
+                self.assertTrue(body["exceptionInfo"].startswith("AUTH02: "))
+
+        self.env.invalidate_all()
+        after = {
+            model: self.env[model].sudo().search_count([])
+            for model in before
+        }
+        self.assertEqual(after, before)
+        logs = self._committed_api_logs(self.http_test_marker)
+        self.assertEqual(len(logs), len(routes))
+        self.assertTrue(all(
+            log["code"] == "AUTH02" and log["status"] == "error" and not log["success"]
+            for log in logs
+        ))
+
+    def test_cc012_full_api01_to_api10_business_mainline_and_stock_invariants(self):
+        """以真实 HTTP、WMS 标准操作和本地 Mock 验证 API01–API10 连续业务主链。"""
+        marker = self.http_test_marker
+        owner = self.http_owner
+        warehouse = self.http_warehouse
+        owner_code = owner.ginlong_owner_code
+        # API09 请求只含 owner 编码；若日志走生产独立游标，也须只清理本测试 owner 的记录。
+        if owner_code not in self.http_log_markers:
+            self.http_log_markers.append(owner_code)
+        product_code = "%s-PRODUCT" % marker
+        inbound_no = "%s-IN" % marker
+        outbound_no = "%s-OUT" % marker
+        count_no = "%s-COUNT" % marker
+        receiver = _LocalGinlongReceiver()
+        params = self.env["ir.config_parameter"].sudo()
+        endpoint_paths = {
+            "API02": "/API/WMS_JSON/TPL_Receipt_Confirmation",
+            "API04": "/API/WMS_JSON/TPL_Inbound_Completion",
+            "API06": "/API/WMS_JSON/TPL_Picking_Completed",
+            "API08": "/API/WMS_JSON/TPL_Shipment_Completed",
+            "API10": "/API/WMS_JSON/TPL_Stocktaking_Completed",
+        }
+        for api_code, path in endpoint_paths.items():
+            params.set_param(
+                "ginlong_apis.%s_callback_url" % api_code.lower(),
+                receiver.url + path,
+            )
+
+        def inventory_snapshot():
+            """只读读取测试产品在 KRWH、指定货主下的物理数量及预留数量。"""
+            self.env.invalidate_all()
+            locations = self.env["stock.location"].sudo().search([
+                ("id", "child_of", warehouse.view_location_id.id),
+                ("usage", "=", "internal"),
+            ])
+            quants = self.env["stock.quant"].sudo().search([
+                ("product_id.ginlong_product_code", "=", product_code),
+                ("product_id.ginlong_owner_code", "=", owner_code),
+                ("owner_id", "=", owner.id),
+                ("location_id", "in", locations.ids),
+            ], order="id")
+            return {
+                "quantity": sum(quants.mapped("quantity")),
+                "reserved": sum(quants.mapped("reserved_quantity")),
+                "rows": tuple((
+                    quant.id,
+                    quant.quantity,
+                    quant.reserved_quantity,
+                    quant.location_id.id,
+                    quant.lot_id.id,
+                    quant.package_id.id,
+                    quant.owner_id.id,
+                ) for quant in quants),
+            }
+
+        try:
+            project = self.http_project
+            project.write({
+                "inbound_pick_type": warehouse.in_type_id.id,
+                "outbound_pick_type": warehouse.out_type_id.id,
+                "is_check_origin_doc": False,
+                "charge_of_pallet": True,
+            })
+            baseline = inventory_snapshot()
+            self.assertEqual(baseline["quantity"], 0, "CC-TEST-140: 测试产品开始时不得有人工补造库存")
+            self.assertEqual(baseline["reserved"], 0)
+
+            # API07 经真实 Ginlong HTTP 路由创建主链唯一产品变体。
+            api07_payload = {
+                "action": "Add",
+                "owner": owner_code,
+                "productCode": product_code,
+                "productName": "CC012 主链序列号成品",
+                "specificationModel": "CC012-SERIAL-MODEL",
+                "unit": self.env.ref("uom.product_uom_unit").name,
+                "productForm": "成品",
+                "weight": 1.25,
+            }
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Product_Master", api07_payload,
+            )
+            api07_body = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-141: API07 HTTP")
+            self.assertEqual(api07_body["returnStatus"], "Y", api07_body)
+            self.assertEqual(set(api07_body), {"returnStatus", "exceptionInfo", "operationTime"})
+            self.env.invalidate_all()
+            product = self.env["product.product"].sudo().search([
+                ("ginlong_owner_code", "=", owner_code),
+                ("ginlong_product_code", "=", product_code),
+                ("active", "=", True),
+            ])
+            self.assertEqual(len(product), 1)
+            self.assertEqual(product.product_tmpl_id.tracking, "serial")
+            self.assertEqual(product.product_tmpl_id.ginlong_weight, 1.25)
+            self.assertEqual(inventory_snapshot(), baseline)
+
+            # 入库前通过真实 HTTP 查询该 owner/warehouse，空库存与查询只读均有明确断言。
+            api09_idempotency_before = self.env["ginlong.api.idempotency"].sudo().search_count([
+                ("api_code", "=", "API09"),
+            ])
+            api09_body = {"owner": owner_code, "warehouse": warehouse.code}
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Stock_Query", api09_body,
+            )
+            api09_before_inbound = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-142: API09 入库前 HTTP")
+            self.assertEqual(api09_before_inbound["returnStatus"], "Y")
+            self.assertEqual(api09_before_inbound["owner"], owner_code)
+            self.assertEqual(api09_before_inbound["warehouse"], warehouse.code)
+            self.assertEqual(api09_before_inbound["inventoryList"], [])
+            self.assertEqual(self.env["ginlong.api.idempotency"].sudo().search_count([
+                ("api_code", "=", "API09"),
+            ]), api09_idempotency_before)
+            self.assertEqual(inventory_snapshot(), baseline)
+
+            # API01 只建客户入库指令；非保税请求不处理 snList，仍不建立 Picking/库存。
+            api01_payload = {
+                "owner": owner_code,
+                "action": "Add",
+                "inboundOrderNo": inbound_no,
+                "warehouse": warehouse.code,
+                "businessType": "STANDARD",
+                "remark": marker,
+                "details": [{
+                    "productCode": product_code,
+                    "productName": api07_payload["productName"],
+                    "specificationModel": api07_payload["specificationModel"],
+                    "quantity": 2,
+                }],
+            }
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Pending_Receipt_Note", api01_payload,
+            )
+            api01_body = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-143: API01 HTTP")
+            self.assertEqual(api01_body["returnStatus"], "Y", api01_body)
+            inbound = self.env["world.depot.inbound.order"].sudo().search([
+                ("reference", "=", inbound_no),
+            ])
+            self.assertEqual(len(inbound), 1)
+            self.assertEqual(inbound.ginlong_owner_id, owner)
+            self.assertEqual(inbound.inbound_order_product_ids.inbound_order_product_pallet_ids.product_id, product)
+            self.assertFalse(inbound.ginlong_stock_picking_ids)
+            self.assertFalse(inbound.inbound_order_product_ids.product_serial_number_ids)
+            self.assertFalse(self.env["stock.picking"].sudo().search([
+                ("inbound_order_id", "=", inbound.id),
+            ]), "API01 只创建预报订单，不创建实际 Picking")
+            self.assertFalse(self.env["stock.move"].sudo().search([
+                ("product_id", "=", product.id),
+            ]), "API01 不创建实际库存移动")
+            self.assertFalse(self.env["stock.move.line"].sudo().search([
+                ("product_id", "=", product.id),
+            ]), "API01 不创建实际作业行")
+            self.assertFalse(self.env["stock.lot"].sudo().search([
+                ("product_id", "=", product.id),
+            ]), "API01 不创建真实 SN/Lot")
+            self.assertFalse(self.env["stock.quant.package"].sudo().search([
+                ("name", "ilike", marker),
+            ]), "API01 不创建真实托盘 Package")
+            self.assertEqual(inventory_snapshot(), baseline)
+
+            inbound.write({"a_date": fields.Date.today(), "pick_type": warehouse.in_type_id.id})
+            inbound.action_confirm()
+            self.assertEqual(inbound.state, "confirm")
+            self.assertEqual(inventory_snapshot(), baseline)
+
+            # API02 分别回传 planning=N 与收货确认 arrive=Y，均不得移动库存。
+            self.assertEqual(inbound.status, "planning", "收货确认操作前应处于规划状态")
+            api02_first = inbound.action_ginlong_api02()
+            self.assertEqual(api02_first["params"]["type"], "success", "CC-TEST-144: API02 planning")
+            self.assertEqual(receiver.records[-1]["body"], {
+                "inboundOrderNo": inbound_no,
+                "action": "UPDATE",
+                "receiptConfirmed": "N",
+            })
+            inbound.action_mark_arrived()
+            # Chatter 跟踪在 Odoo 游标 precommit 阶段生成，先 flush 再读取已保存的跟踪值。
+            self.env.flush_all()
+            inbound.invalidate_recordset(["message_ids"])
+            self.assertEqual(inbound.status, "arrive")
+            self.assertEqual(inbound.state, "confirm")
+            arrival_messages = inbound.message_ids.filtered(
+                lambda message: "收货确认状态已记录：" in (message.body or "")
+            )
+            self.assertTrue(arrival_messages, "CC-TEST-144: 收货确认必须留下明确 Chatter 操作记录")
+            arrival_message = arrival_messages[-1]
+            self.assertIn("planning", arrival_message.body)
+            self.assertIn("arrive", arrival_message.body)
+            self.assertEqual(arrival_message.author_id, self.env.user.partner_id)
+            api02_second = inbound.action_ginlong_api02()
+            self.assertEqual(api02_second["params"]["type"], "success")
+            self.assertEqual(receiver.records[-1]["body"]["receiptConfirmed"], "Y")
+            self.assertEqual(inventory_snapshot(), baseline, "API02 状态操作及回传不能改变物理库存")
+
+            # 按已确认的 WMS 操作创建收货 Picking；未过账时仍无库存变化。
+            inbound.action_create_stock_picking()
+            incoming = self.env["stock.picking"].sudo().search([
+                ("inbound_order_id", "=", inbound.id),
+                ("state", "!=", "cancel"),
+            ], order="id desc", limit=1)
+            self.assertTrue(incoming, "CC-TEST-145: WMS 收货 Picking 已创建")
+            incoming_lines = incoming.move_line_ids.sorted("id")
+            self.assertEqual(len(incoming_lines), 2, "序列号产品的实际作业行应为每件一行")
+            lots = self.env["stock.lot"].sudo().create([
+                {"name": "%s-SN-%03d" % (marker, index), "product_id": product.id,
+                 "company_id": incoming.company_id.id}
+                for index in (1, 2)
+            ])
+            for line, lot in zip(incoming_lines, lots):
+                line.write({"lot_id": lot.id, "owner_id": owner.id})
+            self.assertEqual(inventory_snapshot(), baseline, "未完成的 Incoming Picking 不得入账")
+            if incoming.state == "draft":
+                incoming.action_confirm()
+            incoming.move_ids.picked = True
+            incoming.button_validate()
+            self.assertEqual(incoming.state, "done", "CC-TEST-145: 标准 Incoming Picking 完成")
+            self.assertEqual(incoming.ginlong_actual_inbound_operator_id, self.env.user)
+            after_receipt = inventory_snapshot()
+            self.assertEqual(after_receipt["quantity"], 2, "只有完成的 Incoming Picking 增加物理库存")
+            self.assertEqual(after_receipt["reserved"], 0)
+            received_sn_quants = self.env["stock.quant"].sudo().search([
+                ("product_id", "=", product.id),
+                ("owner_id", "=", owner.id),
+                ("location_id", "child_of", warehouse.view_location_id.id),
+                ("quantity", ">", 0),
+            ])
+            self.assertEqual(sum(received_sn_quants.mapped("quantity")), 2)
+            self.assertEqual(set(received_sn_quants.mapped("lot_id")), set(lots),
+                             "已完成入库必须在库存台账中保留实际 SN 身份")
+
+            # API04 只从此订单的 Done/Incoming Picking 及已保存 move line 生成实际入库结果。
+            api04_result = inbound.action_ginlong_api04()
+            self.assertEqual(api04_result["params"]["type"], "success", "CC-TEST-146: API04")
+            api04_http = receiver.records[-1]
+            self.assertEqual(api04_http["path"], endpoint_paths["API04"])
+            self.assertEqual(api04_http["body"]["inboundOrderNo"], inbound_no)
+            self.assertEqual(api04_http["body"]["action"], "CREATE")
+            self.assertEqual(len(api04_http["body"]["snList"]), 2)
+            self.assertEqual({row["productSN"] for row in api04_http["body"]["snList"]}, set(lots.mapped("name")))
+            self.assertEqual({row["productCode"] for row in api04_http["body"]["snList"]}, {product_code})
+            self.assertEqual({row["palletCode"] for row in api04_http["body"]["snList"]}, {
+                incoming_lines[0].result_package_id.name,
+            })
+            self.assertTrue(all(row["operator"] and row["operationTime"] for row in api04_http["body"]["snList"]))
+            self.assertEqual(inventory_snapshot(), after_receipt, "API04 回传不重复增加库存")
+
+            # API09 的真实 HTTP 请求只读返回此 owner + warehouse + product 的物理 quantity。
+            api09_idempotency_before = self.env["ginlong.api.idempotency"].sudo().search_count([
+                ("api_code", "=", "API09"),
+            ])
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Stock_Query", api09_body,
+            )
+            api09_response = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-147: API09 HTTP")
+            self.assertEqual(api09_response["returnStatus"], "Y")
+            self.assertEqual(api09_response["owner"], owner_code)
+            self.assertEqual(api09_response["warehouse"], warehouse.code)
+            self.assertEqual(api09_response["inventoryList"], [{
+                "productCode": product_code, "quantity": 2.0,
+            }])
+            self.assertEqual(self.env["ginlong.api.idempotency"].sudo().search_count([
+                ("api_code", "=", "API09"),
+            ]), api09_idempotency_before, "API09 不建立持久化幂等记录")
+            self.assertEqual(inventory_snapshot(), after_receipt, "API09 查询不得改变 quant/move")
+
+            # API03 复用 API07 创建的相同货主产品，只建出库指令，不预留或扣减库存。
+            move_counts_before_api03 = (
+                self.env["stock.move"].sudo().search_count([("product_id", "=", product.id)]),
+                self.env["stock.move.line"].sudo().search_count([("product_id", "=", product.id)]),
+            )
+            api03_payload = {
+                "owner": owner_code,
+                "action": "Add",
+                "outboundOrderNo": outbound_no,
+                "warehouse": warehouse.code,
+                "businessType": "STANDARD",
+                "remark": marker,
+                "customer": self.http_recipient.name,
+                "details": [{
+                    "productCode": product_code,
+                    "productName": api07_payload["productName"],
+                    "specificationModel": api07_payload["specificationModel"],
+                    "quantity": 1,
+                    "net_wt_machine": 1.25,
+                    "net_wt_total": 1.25,
+                    "pack_qty": 1,
+                    "pallet_qty": 1,
+                    "pallet_len": 100,
+                    "pallet_wid": 80,
+                    "pallet_hgt": 90,
+                    "unit_vol": 0.1,
+                    "pack_unit": "Unit",
+                    "pack_wt": 0,
+                    "pallet_total_wt": 1.25,
+                    "total_vol": 0.1,
+                    "carton_wt_total": 1.25,
+                    "gross_wt_total": 1.25,
+                }],
+            }
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Pending_Delivery_Note", api03_payload,
+            )
+            api03_body = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-148: API03 HTTP")
+            self.assertEqual(api03_body["returnStatus"], "Y", api03_body)
+            outbound = self.env["world.depot.outbound.order"].sudo().search([
+                ("reference", "=", outbound_no),
+            ])
+            self.assertEqual(len(outbound), 1)
+            self.assertEqual(outbound.outbound_order_product_ids.product_id, product)
+            self.assertEqual(outbound.outbound_order_product_ids.quantity, 1)
+            self.assertFalse(outbound.ginlong_stock_picking_ids)
+            self.assertEqual((
+                self.env["stock.move"].sudo().search_count([("product_id", "=", product.id)]),
+                self.env["stock.move.line"].sudo().search_count([("product_id", "=", product.id)]),
+            ), move_counts_before_api03, "API03 不创建 stock.move 或 move line")
+            self.assertEqual(inventory_snapshot(), after_receipt, "API03 不得创建备货、预留或改变物理库存")
+
+            outbound.write({
+                "pick_type": warehouse.out_type_id.id,
+                "p_date": fields.Date.today(),
+            })
+            outbound.action_confirm()
+            outbound.action_create_picking_PICK()
+            outgoing = outbound.ginlong_stock_picking_ids.sorted("id")[-1]
+            self.assertTrue(outgoing, "CC-TEST-149: 通过现有 WMS 操作创建备货 Picking")
+            self.assertEqual(outgoing.picking_type_id.code, "outgoing")
+            outbound_lines = outgoing.move_line_ids.filtered(lambda line: line.quantity > 0)
+            self.assertEqual(len(outbound_lines), 1)
+            reserved_quants = self.env["stock.quant"].sudo().search([
+                ("product_id", "=", product.id),
+                ("owner_id", "=", owner.id),
+                ("location_id", "child_of", warehouse.view_location_id.id),
+            ]).filtered(lambda quant: quant.reserved_quantity > 0)
+            self.assertEqual(sum(reserved_quants.mapped("reserved_quantity")), 1)
+            self.assertEqual(outbound_lines.owner_id, owner)
+            self.assertTrue(outbound_lines.package_id)
+            selected_quant = received_sn_quants.filtered(
+                lambda quant: quant.package_id == outbound_lines.package_id and quant.quantity > 0
+            )[:1]
+            self.assertTrue(selected_quant and selected_quant.lot_id,
+                            "模拟仓库实际扫描时必须选择该托盘上的已入库 SN")
+            outbound_lines.write({
+                "lot_id": selected_quant.lot_id.id,
+                "ginlong_operator_code": "cc012-warehouse-operator",
+                "ginlong_operation_time": fields.Datetime.now(),
+            })
+            outgoing.ginlong_callback_selected = True
+            before_outbound_done = inventory_snapshot()
+            self.assertEqual(before_outbound_done["quantity"], 2)
+            self.assertEqual(before_outbound_done["reserved"], 1)
+
+            # 本项目一步出库：唯一 Outgoing Picking 完成即记录出库实绩，之后 API06 只回传、不再移动库存。
+            outgoing.move_ids.picked = True
+            outgoing.button_validate()
+            self.assertEqual(outgoing.state, "done", "CC-TEST-149: 唯一标准 Outgoing Picking 完成")
+            after_outbound_done = inventory_snapshot()
+            self.assertEqual(after_outbound_done["quantity"], 1, "唯一 Done Picking 执行一次物理出库")
+            self.assertEqual(after_outbound_done["reserved"], 0)
+            shipped_line = outgoing.move_line_ids.filtered(lambda line: line.quantity > 0)
+            self.assertEqual(shipped_line.lot_id, selected_quant.lot_id)
+
+            # API06 读取同一 Done Picking 的备货/作业结果；回传本身不得再次改变库存。
+            api06_result = outbound.action_ginlong_api06()
+            self.assertEqual(api06_result["params"]["type"], "success", "CC-TEST-150: API06")
+            api06_http = receiver.records[-1]
+            self.assertEqual(api06_http["path"], endpoint_paths["API06"])
+            self.assertEqual(api06_http["body"]["outboundOrderNo"], outbound_no)
+            self.assertEqual(api06_http["body"]["action"], "CREATE")
+            self.assertEqual(api06_http["body"]["palletQty"], "1")
+            self.assertEqual(api06_http["body"]["totalWeight"], "1.25")
+            self.assertEqual(len(api06_http["body"]["snList"]), 1)
+            self.assertEqual(api06_http["body"]["snList"][0]["productSN"], selected_quant.lot_id.name)
+            self.assertEqual(inventory_snapshot(), after_outbound_done, "API06 回传不应重复扣减物理库存")
+
+            # API08 只依赖实际 Done/outgoing Picking，确认订单状态并回传；不再次扣库存。
+            api08_result = outbound.action_ginlong_api08()
+            self.assertEqual(api08_result["params"]["type"], "success", "CC-TEST-152: API08")
+            self.assertEqual(outbound.status, "outbound", "CC-TEST-152: 订单业务状态已更新")
+            api08_http = receiver.records[-1]
+            self.assertEqual(api08_http["path"], endpoint_paths["API08"])
+            self.assertEqual(api08_http["body"], {
+                "outboundOrderNo": outbound_no,
+                "action": "CREATE",
+                "shipmentConfirmed": "Y",
+            })
+            self.assertEqual(inventory_snapshot(), after_outbound_done, "API08 不得再次扣减库存")
+
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Stock_Query", api09_body,
+            )
+            api09_after_shipment = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-153: API09 发货后 HTTP")
+            self.assertEqual(api09_after_shipment["inventoryList"], [{
+                "productCode": product_code, "quantity": 1.0,
+            }])
+            self.assertEqual(inventory_snapshot(), after_outbound_done)
+
+            # 盘点计划引用入库 Picking 生成的实际 SN/托盘；quant 只用于上面的库存快照断言。
+            remaining_lot = lots.filtered(lambda lot: lot != shipped_line.lot_id)
+            self.assertEqual(len(remaining_lot), 1, "发货后应保留另一件入库 SN")
+            remaining_inbound_line = incoming_lines.filtered(
+                lambda line: line.lot_id == remaining_lot
+            )
+            self.assertEqual(len(remaining_inbound_line), 1)
+            self.assertTrue(remaining_inbound_line.result_package_id)
+            remaining_serial = remaining_inbound_line.lot_id.name
+            remaining_pallet = remaining_inbound_line.result_package_id.name
+            api05_payload = {
+                "owner": owner_code,
+                "action": "Add",
+                "countOrderNo": count_no,
+                "warehouse": warehouse.code,
+                "remark": marker,
+                "details": [{
+                    "productCode": product_code,
+                    "productName": api07_payload["productName"],
+                    "specificationModel": api07_payload["specificationModel"],
+                    "quantity": 1,
+                }],
+                "snList": [{
+                    "productSN": remaining_serial,
+                    "quantity": 1,
+                    "palletCode": remaining_pallet,
+                    "productCode": product_code,
+                    "productName": api07_payload["productName"],
+                    "specificationModel": api07_payload["specificationModel"],
+                }],
+            }
+            response = self._post_with_rate_reset(
+                "/api/ginlong/TPL_Stocktake_Order", api05_payload,
+            )
+            api05_body = json.loads(response.text)
+            self.assertEqual(response.status_code, 200, "CC-TEST-154: API05 HTTP")
+            self.assertEqual(api05_body["returnStatus"], "Y", api05_body)
+            count_order = self.env["world.depot.stocktake.order"].sudo().search([
+                ("count_order_no", "=", count_no),
+            ])
+            self.assertEqual(len(count_order), 1)
+            self.assertFalse(count_order.result_ids, "客户盘点指令不能冒充实盘结果")
+            self.assertEqual(inventory_snapshot(), after_outbound_done, "API05 指令不改变库存")
+
+            # 通过现有实盘结果模型保存一次实际采集记录；来源独立于客户计划和库存 quant。
+            actual_count = self.env["world.depot.stocktake.result"].sudo().create({
+                "order_id": count_order.id,
+                "product_id": product.id,
+                "product_code": product_code,
+                "product_name": product.name,
+                "specification_model": api07_payload["specificationModel"],
+                "serial_number": remaining_serial,
+                "quantity": 1,
+                "pallet_code": remaining_pallet,
+                "operator_id": self.env.user.id,
+                "operation_time": fields.Datetime.now(),
+                "ginlong_operator_code": "cc012-stocktake-operator",
+                "ginlong_callback_selected": True,
+            })
+            self.assertEqual(count_order.result_ids, actual_count, "CC-TEST-155: 实盘结果关联盘点指令")
+            self.assertEqual(inventory_snapshot(), after_outbound_done)
+
+            # API10 只从已保存实盘结果回传；不得读取计划或修改库存。
+            api10_result = count_order.action_ginlong_api10()
+            self.assertEqual(api10_result["params"]["type"], "success", "CC-TEST-156: API10")
+            api10_http = receiver.records[-1]
+            self.assertEqual(api10_http["path"], endpoint_paths["API10"])
+            self.assertEqual(api10_http["body"]["countOrderNo"], count_no)
+            self.assertEqual(api10_http["body"]["action"], "Add")
+            self.assertEqual(api10_http["body"]["snList"], [{
+                "productSN": actual_count.serial_number,
+                "quantity": 1,
+                "palletCode": actual_count.pallet_code,
+                "productCode": product_code,
+                "operator": "cc012-stocktake-operator",
+                "operationTime": fields.Datetime.to_string(actual_count.operation_time),
+            }])
+            self.assertEqual(inventory_snapshot(), after_outbound_done, "API10 盘点回传不改变库存")
+
+            expected_posts = [
+                endpoint_paths["API02"], endpoint_paths["API02"],
+                endpoint_paths["API04"], endpoint_paths["API06"],
+                endpoint_paths["API08"], endpoint_paths["API10"],
+            ]
+            self.assertEqual([item["path"] for item in receiver.records], expected_posts,
+                             "CC-TEST-157: 本地 Mock 必须仅收到预期的六次 POST")
+            self.assertTrue(all(
+                item["headers"].get("Content-Type", "").startswith("application/json")
+                for item in receiver.records
+            ))
+
+            # 入站 HTTP 与主动回传都留下独立 API Log；回传日志关联幂等事件且不覆写历史。
+            all_logs = self.env["world.depot.api.log"].sudo().search([
+                "&",
+                ("ginlong_api_code", "in", ["API01", "API02", "API03", "API04", "API05",
+                                               "API06", "API07", "API08", "API09", "API10"]),
+                "|",
+                ("request_data", "ilike", marker),
+                ("request_data", "ilike", owner_code),
+            ], order="id")
+            self.assertEqual(len(all_logs), 13, "应有 7 个入站 HTTP 请求和 6 次回传 HTTP 尝试")
+            self.assertEqual(set(all_logs.mapped("ginlong_api_code")), {
+                "API01", "API02", "API03", "API04", "API05",
+                "API06", "API07", "API08", "API09", "API10",
+            })
+            self.assertEqual({
+                api_code: len(all_logs.filtered(lambda log: log.ginlong_api_code == api_code))
+                for api_code in (
+                    "API01", "API02", "API03", "API04", "API05",
+                    "API06", "API07", "API08", "API09", "API10",
+                )
+            }, {
+                "API01": 1, "API02": 2, "API03": 1, "API04": 1, "API05": 1,
+                "API06": 1, "API07": 1, "API08": 1, "API09": 3, "API10": 1,
+            })
+            callback_logs = all_logs.filtered(lambda log: log.ginlong_api_code in {
+                "API02", "API04", "API06", "API08", "API10",
+            })
+            self.assertEqual(len(callback_logs), 6)
+            self.assertTrue(all(log.success for log in callback_logs))
+            idempotent_callback_logs = callback_logs.filtered(
+                lambda log: log.ginlong_api_code in {"API02", "API04", "API06", "API08"}
+            )
+            self.assertEqual(len(idempotent_callback_logs), 5)
+            self.assertTrue(all(log.ginlong_idempotency_id for log in idempotent_callback_logs))
+            self.assertTrue(all(
+                log.ginlong_idempotency_id.state == "succeeded"
+                for log in idempotent_callback_logs
+            ))
+            self.assertFalse(
+                callback_logs.filtered(lambda log: log.ginlong_api_code == "API10").ginlong_idempotency_id,
+                "API10 既有行为不纳入 API02/04/06/08 重复回传机制",
+            )
+            self.assertEqual(inbound.ginlong_api02_last_success, True)
+            self.assertEqual(inbound.ginlong_api04_last_success, True)
+            self.assertEqual(inventory_snapshot()["quantity"], 1, "CC-TEST-157: 最终物理库存由两个 Done Picking 决定")
+        finally:
+            receiver.close()

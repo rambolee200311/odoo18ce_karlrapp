@@ -18,5 +18,5 @@ curl --silent --show-error --include --request POST \
   "${GINLONG_HVR_BASE_URL%/}/api/ginlong/TPL_Pending_Receipt_Note" \
   --header 'Accept: application/json' \
   --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer ${GINLONG_HVR_TOKEN}" \
+  --header "Authorization: ${GINLONG_HVR_TOKEN}" \
   --data-binary "@${PAYLOAD}"

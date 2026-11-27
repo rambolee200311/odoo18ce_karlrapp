@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- 通用一次性确认窗口只展示业务对象和历史结果，不向业务用户展示 JSON。 -->
+    <record id="view_ginlong_callback_confirmation_form" model="ir.ui.view">
+        <field name="name">ginlong.api.callback.confirmation.form</field>
+        <field name="model">ginlong.api.callback.confirmation</field>
+        <field name="arch" type="xml">
+            <form string="确认 Ginlong 回传">
+                <sheet>
+                    <group>
+                        <field name="api_code"/>
+                        <field name="event_summary" readonly="1"/>
+                        <field name="history_summary" readonly="1"/>
+                    </group>
+                    <group invisible="not multi_event">
+                        <field name="scope" widget="radio"/>
+                    </group>
+                    <div class="alert alert-warning" role="alert" invisible="not has_unknown">
+                        上次请求结果未知；接收方可能已处理。勾选后才会重试未知事件。
+                    </div>
+                    <field name="confirm_unknown" invisible="not has_unknown"/>
+                    <field name="source_record" invisible="1"/>
+                    <field name="event_snapshots" invisible="1"/>
+                    <field name="confirmation_token" invisible="1"/>
+                    <field name="multi_event" invisible="1"/>
+                    <field name="has_unknown" invisible="1"/>
+                    <field name="consumed" invisible="1"/>
+                </sheet>
+                <footer>
+                    <button name="action_confirm" type="object" string="确认回传" class="oe_highlight"/>
+                    <button name="action_cancel" type="object" string="取消" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

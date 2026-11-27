@@ -1,0 +1,1093 @@
+{
+  "run_id": "CC005-FINAL-20261127-01",
+  "database": "odooce_karlrapp",
+  "orders": {
+    "inbound": {
+      "id": 3077,
+      "reference": "HVR-FINAL-20261127-IN-01",
+      "project_id": 106,
+      "owner_id": 423
+    },
+    "outbound": {
+      "id": 1578,
+      "reference": "HVR-FINAL-20261127-OUT-01",
+      "project_id": 106,
+      "owner_id": 423
+    },
+    "stocktake": {
+      "id": 1070,
+      "reference": "HVR-FINAL-20261127-COUNT-01",
+      "project_id": 106,
+      "owner_code": "HVR-GIN005-OWNER",
+      "warehouse_code": "KRWH",
+      "state": "new"
+    }
+  },
+  "logs": [
+    {
+      "id": 10745,
+      "api": "API07",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"HVR-FINAL-20261127-FG\"]",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Product_Master",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "action": "Add",
+        "owner": "HVR-GIN005-OWNER",
+        "productCode": "HVR-FINAL-20261127-FG",
+        "productName": "HVR 最终主链成品",
+        "specificationModel": "HVR-FINAL-FG-MODEL",
+        "unit": "台",
+        "power": "5kW",
+        "nationalStandard": "HVR-FINAL-STD",
+        "certificationModel": "HVR-FINAL-FG-CERT",
+        "productForm": "成品",
+        "weight": 1.25,
+        "length": 120,
+        "width": 100,
+        "height": 90
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:16:20"
+      }
+    },
+    {
+      "id": 10746,
+      "api": "API07",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"HVR-FINAL-20261127-SF\"]",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Product_Master",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "action": "Add",
+        "owner": "HVR-GIN005-OWNER",
+        "productCode": "HVR-FINAL-20261127-SF",
+        "productName": "HVR 最终主链半成品",
+        "specificationModel": "HVR-FINAL-SF-MODEL",
+        "unit": "台",
+        "power": "3kW",
+        "nationalStandard": "HVR-FINAL-STD",
+        "certificationModel": "HVR-FINAL-SF-CERT",
+        "productForm": "半成品",
+        "weight": 0.9,
+        "length": 100,
+        "width": 80,
+        "height": 70
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:17:29"
+      }
+    },
+    {
+      "id": 10747,
+      "api": "API07",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"HVR-FINAL-20261127-RAW\"]",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Product_Master",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "action": "Add",
+        "owner": "HVR-GIN005-OWNER",
+        "productCode": "HVR-FINAL-20261127-RAW",
+        "productName": "HVR 最终主链原材料",
+        "specificationModel": "HVR-FINAL-RAW-MODEL",
+        "unit": "台",
+        "power": "0kW",
+        "nationalStandard": "HVR-FINAL-STD",
+        "certificationModel": "HVR-FINAL-RAW-CERT",
+        "productForm": "原材料",
+        "weight": 0.5,
+        "length": 60,
+        "width": 40,
+        "height": 30
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:17:51"
+      }
+    },
+    {
+      "id": 10748,
+      "api": "API09",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"KRWH\"]",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Stock_Query",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "warehouse": "KRWH"
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:18:50",
+        "owner": "HVR-GIN005-OWNER",
+        "warehouse": "KRWH",
+        "inventoryList": [
+          {
+            "productCode": "HVR005-20261127-RUN03-FG",
+            "quantity": 2.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-RAW",
+            "quantity": 9.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-SF",
+            "quantity": 2.0
+          }
+        ]
+      }
+    },
+    {
+      "id": 10749,
+      "api": "API01",
+      "business_key": "HVR-FINAL-20261127-IN-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Pending_Receipt_Note",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "action": "Add",
+        "inboundOrderNo": "HVR-FINAL-20261127-IN-01",
+        "warehouse": "KRWH",
+        "businessType": "保税_海外收货入库",
+        "remark": "CC-GIN-005 最终版连续主链入库预报",
+        "details": [
+          {
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL",
+            "quantity": 4
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-SF",
+            "productName": "HVR 最终主链半成品",
+            "specificationModel": "HVR-FINAL-SF-MODEL",
+            "quantity": 2
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL",
+            "quantity": 12
+          }
+        ],
+        "snList": [
+          {
+            "productSN": "HVRF27-FG-SN-001",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-002",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-001",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "productName": "HVR 最终主链半成品",
+            "specificationModel": "HVR-FINAL-SF-MODEL"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 5,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-003",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-002",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 4,
+            "palletCode": "HVRF27-PALLET-002",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-004",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-002",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "productName": "HVR 最终主链半成品",
+            "specificationModel": "HVR-FINAL-SF-MODEL"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 3,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL"
+          }
+        ]
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:19:43"
+      }
+    },
+    {
+      "id": 10750,
+      "api": "API02",
+      "business_key": "HVR-FINAL-20261127-IN-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "http://127.0.0.1:18102/API/WMS_JSON/TPL_Receipt_Confirmation",
+      "source_record": "world.depot.inbound.order(3077,)",
+      "idempotency_id": 9032,
+      "request": {
+        "inboundOrderNo": "HVR-FINAL-20261127-IN-01",
+        "action": "UPDATE",
+        "receiptConfirmed": "N"
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 16:26:00"
+      }
+    },
+    {
+      "id": 10751,
+      "api": "API02",
+      "business_key": "HVR-FINAL-20261127-IN-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "http://127.0.0.1:18102/API/WMS_JSON/TPL_Receipt_Confirmation",
+      "source_record": "world.depot.inbound.order(3077,)",
+      "idempotency_id": 9033,
+      "request": {
+        "inboundOrderNo": "HVR-FINAL-20261127-IN-01",
+        "action": "UPDATE",
+        "receiptConfirmed": "Y"
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 16:29:53"
+      }
+    },
+    {
+      "id": 10752,
+      "api": "API04",
+      "business_key": "HVR-FINAL-20261127-IN-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "http://127.0.0.1:18104/API/WMS_JSON/TPL_Inbound_Completion",
+      "source_record": "stock.picking(2156,)",
+      "idempotency_id": 9034,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "action": "CREATE",
+        "inboundOrderNo": "HVR-FINAL-20261127-IN-01",
+        "snList": [
+          {
+            "productSN": "HVRF27-FG-SN-004",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-002",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 3.0,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-003",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-002",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 4.0,
+            "palletCode": "HVRF27-PALLET-002",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-001",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-002",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-001",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 5.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 08:46:15"
+          }
+        ]
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 16:47:05"
+      }
+    },
+    {
+      "id": 10753,
+      "api": "API09",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"KRWH\"]",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Stock_Query",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "warehouse": "KRWH"
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:48:32",
+        "owner": "HVR-GIN005-OWNER",
+        "warehouse": "KRWH",
+        "inventoryList": [
+          {
+            "productCode": "HVR-FINAL-20261127-FG",
+            "quantity": 4.0
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "quantity": 12.0
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-SF",
+            "quantity": 2.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-FG",
+            "quantity": 2.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-RAW",
+            "quantity": 9.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-SF",
+            "quantity": 2.0
+          }
+        ]
+      }
+    },
+    {
+      "id": 10754,
+      "api": "API03",
+      "business_key": "HVR-FINAL-20261127-OUT-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Pending_Delivery_Note",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "action": "Add",
+        "outboundOrderNo": "HVR-FINAL-20261127-OUT-01",
+        "warehouse": "KRWH",
+        "businessType": "STANDARD",
+        "remark": "CC-GIN-005 最终版连续主链；整托 PALLET-002 并拆出 PALLET-001 一件",
+        "customer": "HVR-GIN005 recipient",
+        "details": [
+          {
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL",
+            "quantity": 1,
+            "net_wt_machine": 1.25,
+            "net_wt_total": 1.25,
+            "pack_qty": 1,
+            "pallet_qty": 1,
+            "pallet_len": 120,
+            "pallet_wid": 100,
+            "pallet_hgt": 90,
+            "unit_vol": 1.08,
+            "pack_unit": "台",
+            "pack_wt": 0.1,
+            "pallet_total_wt": 1.35,
+            "total_vol": 1.08,
+            "carton_wt_total": 1.25,
+            "gross_wt_total": 1.35
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL",
+            "quantity": 1,
+            "net_wt_machine": 1.25,
+            "net_wt_total": 1.25,
+            "pack_qty": 1,
+            "pallet_qty": 1,
+            "pallet_len": 120,
+            "pallet_wid": 100,
+            "pallet_hgt": 90,
+            "unit_vol": 1.08,
+            "pack_unit": "台",
+            "pack_wt": 0.1,
+            "pallet_total_wt": 1.35,
+            "total_vol": 1.08,
+            "carton_wt_total": 1.25,
+            "gross_wt_total": 1.35
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL",
+            "quantity": 4,
+            "net_wt_machine": 0.5,
+            "net_wt_total": 2.0,
+            "pack_qty": 4,
+            "pallet_qty": 1,
+            "pallet_len": 120,
+            "pallet_wid": 100,
+            "pallet_hgt": 90,
+            "unit_vol": 0.4,
+            "pack_unit": "台",
+            "pack_wt": 0.2,
+            "pallet_total_wt": 2.2,
+            "total_vol": 0.4,
+            "carton_wt_total": 2.0,
+            "gross_wt_total": 2.2
+          }
+        ]
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 08:51:31"
+      }
+    },
+    {
+      "id": 10755,
+      "api": "API06",
+      "business_key": "HVR-FINAL-20261127-OUT-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "http://127.0.0.1:18106/API/WMS_JSON/TPL_Picking_Completed",
+      "source_record": "world.depot.outbound.order(1578,)",
+      "idempotency_id": 9036,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "action": "CREATE",
+        "outboundOrderNo": "HVR-FINAL-20261127-OUT-01",
+        "palletQty": "2",
+        "totalWeight": "4.5",
+        "snList": [
+          {
+            "productSN": "HVRF27-FG-SN-001",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:22:32"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-003",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-002",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:22:32"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 4.0,
+            "palletCode": "HVRF27-PALLET-002",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:22:32"
+          }
+        ]
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 17:31:41"
+      }
+    },
+    {
+      "id": 10756,
+      "api": "API08",
+      "business_key": "HVR-FINAL-20261127-OUT-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "http://127.0.0.1:18106/API/WMS_JSON/TPL_Shipment_Completed",
+      "source_record": "world.depot.outbound.order(1578,)",
+      "idempotency_id": 9037,
+      "request": {
+        "outboundOrderNo": "HVR-FINAL-20261127-OUT-01",
+        "action": "CREATE",
+        "shipmentConfirmed": "Y"
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 17:32:26"
+      }
+    },
+    {
+      "id": 10757,
+      "api": "API09",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"KRWH\"]",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Stock_Query",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "warehouse": "KRWH"
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 09:34:58",
+        "owner": "HVR-GIN005-OWNER",
+        "warehouse": "KRWH",
+        "inventoryList": [
+          {
+            "productCode": "HVR-FINAL-20261127-FG",
+            "quantity": 2.0
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "quantity": 8.0
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-SF",
+            "quantity": 2.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-FG",
+            "quantity": 2.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-RAW",
+            "quantity": 9.0
+          },
+          {
+            "productCode": "HVR005-20261127-RUN03-SF",
+            "quantity": 2.0
+          }
+        ]
+      }
+    },
+    {
+      "id": 10759,
+      "api": "API05",
+      "business_key": "HVR-FINAL-20261127-COUNT-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "/api/ginlong/TPL_Stocktake_Order",
+      "source_record": null,
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "action": "Add",
+        "countOrderNo": "HVR-FINAL-20261127-COUNT-01",
+        "warehouse": "KRWH",
+        "remark": "CC-GIN-005 最终版主链：核对出库后实际剩余库存",
+        "details": [
+          {
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL",
+            "quantity": 2
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-SF",
+            "productName": "HVR 最终主链半成品",
+            "specificationModel": "HVR-FINAL-SF-MODEL",
+            "quantity": 2
+          },
+          {
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL",
+            "quantity": 8
+          }
+        ],
+        "snList": [
+          {
+            "productSN": "HVRF27-FG-SN-002",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-004",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "productName": "HVR 最终主链成品",
+            "specificationModel": "HVR-FINAL-FG-MODEL"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-001",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "productName": "HVR 最终主链半成品",
+            "specificationModel": "HVR-FINAL-SF-MODEL"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-002",
+            "quantity": 1,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "productName": "HVR 最终主链半成品",
+            "specificationModel": "HVR-FINAL-SF-MODEL"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 5,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 3,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "productName": "HVR 最终主链原材料",
+            "specificationModel": "HVR-FINAL-RAW-MODEL"
+          }
+        ]
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 09:36:24"
+      }
+    },
+    {
+      "id": 10760,
+      "api": "API10",
+      "business_key": "HVR-FINAL-20261127-COUNT-01",
+      "status": "success",
+      "success": true,
+      "http_code": "200",
+      "path": "http://127.0.0.1:18106/API/WMS_JSON/TPL_Stocktaking_Completed",
+      "source_record": "world.depot.stocktake.order(1070,)",
+      "idempotency_id": null,
+      "request": {
+        "owner": "HVR-GIN005-OWNER",
+        "action": "Add",
+        "countOrderNo": "HVR-FINAL-20261127-COUNT-01",
+        "snList": [
+          {
+            "productSN": "HVRF27-FG-SN-002",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:37:02"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-001",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:37:02"
+          },
+          {
+            "productSN": "HVRF27-SF-SN-002",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-SF",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:37:02"
+          },
+          {
+            "productSN": "HVRF27-FG-SN-004",
+            "quantity": 1.0,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-FG",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:37:02"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 5.0,
+            "palletCode": "HVRF27-PALLET-001",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:37:02"
+          },
+          {
+            "productSN": "HVR-FINAL-20261127-RAW",
+            "quantity": 3.0,
+            "palletCode": "HVRF27-PALLET-003",
+            "productCode": "HVR-FINAL-20261127-RAW",
+            "operator": "hvr.ginlong.operator",
+            "operationTime": "2026-11-27 09:37:02"
+          }
+        ]
+      },
+      "response": {
+        "returnStatus": "Y",
+        "exceptionInfo": "OK",
+        "operationTime": "2026-11-27 17:51:45"
+      }
+    }
+  ],
+  "idempotency": [
+    {
+      "id": 9028,
+      "api": "API07",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"HVR-FINAL-20261127-FG\"]",
+      "action": "add",
+      "direction": "inbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9029,
+      "api": "API07",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"HVR-FINAL-20261127-SF\"]",
+      "action": "add",
+      "direction": "inbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9030,
+      "api": "API07",
+      "business_key": "[\"HVR-GIN005-OWNER\",\"HVR-FINAL-20261127-RAW\"]",
+      "action": "add",
+      "direction": "inbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9031,
+      "api": "API01",
+      "business_key": "HVR-FINAL-20261127-IN-01",
+      "action": "add",
+      "direction": "inbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9032,
+      "api": "API02",
+      "business_key": "aa2eb1d1ad701c625a2d957f20634061b00dd2ce35258eeb68d6b33eab8c59c2",
+      "action": "UPDATE",
+      "direction": "outbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9033,
+      "api": "API02",
+      "business_key": "aa2eb1d1ad701c625a2d957f20634061b00dd2ce35258eeb68d6b33eab8c59c2",
+      "action": "UPDATE",
+      "direction": "outbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9034,
+      "api": "API04",
+      "business_key": "57d46a37cecabe88a6cb64f72f94e6658bc338386ede84c9e0b6a9298eb31ced",
+      "action": "CREATE",
+      "direction": "outbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9035,
+      "api": "API03",
+      "business_key": "HVR-FINAL-20261127-OUT-01",
+      "action": "add",
+      "direction": "inbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9036,
+      "api": "API06",
+      "business_key": "5d48cd4fcaef5651173f36b8f9a7fb906d8fafc4f9bc81c4d1a2baeddb96505a",
+      "action": "CREATE",
+      "direction": "outbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9037,
+      "api": "API08",
+      "business_key": "1d721f0e155faf67699ef939e8ecd1be7962aeeda1cdba9d9310dd031cfe9fc0",
+      "action": "CREATE",
+      "direction": "outbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    },
+    {
+      "id": 9038,
+      "api": "API05",
+      "business_key": "HVR-FINAL-20261127-COUNT-01",
+      "action": "add",
+      "direction": "inbound",
+      "state": "succeeded",
+      "attempt_count": 1
+    }
+  ],
+  "pickings": [
+    {
+      "id": 2156,
+      "name": "KRWH/KRIN/01310",
+      "state": "done",
+      "type": "incoming",
+      "date_done": "2026-11-27 08:46:15",
+      "inbound_order_id": 3077,
+      "outbound_order_id": null,
+      "owner_id": 423,
+      "project_id": null
+    },
+    {
+      "id": 2157,
+      "name": "KRWH/KROUT/00832",
+      "state": "done",
+      "type": "outgoing",
+      "date_done": "2026-11-27 09:22:32",
+      "inbound_order_id": null,
+      "outbound_order_id": 1578,
+      "owner_id": null,
+      "project_id": null
+    }
+  ],
+  "stock": [
+    {
+      "product_id": 4643,
+      "product_code": "HVR-FINAL-20261127-FG",
+      "quantity": 2.0,
+      "reserved_quantity": 0.0,
+      "packages": [
+        {
+          "location": "KRWH/KRStock",
+          "package": "HVRF27-PALLET-003",
+          "lot": "HVRF27-FG-SN-004",
+          "quantity": 1.0,
+          "reserved_quantity": 0.0
+        },
+        {
+          "location": "KRWH/KRStock",
+          "package": "HVRF27-PALLET-001",
+          "lot": "HVRF27-FG-SN-002",
+          "quantity": 1.0,
+          "reserved_quantity": 0.0
+        }
+      ]
+    },
+    {
+      "product_id": 4644,
+      "product_code": "HVR-FINAL-20261127-SF",
+      "quantity": 2.0,
+      "reserved_quantity": 0.0,
+      "packages": [
+        {
+          "location": "KRWH/KRStock",
+          "package": "HVRF27-PALLET-003",
+          "lot": "HVRF27-SF-SN-002",
+          "quantity": 1.0,
+          "reserved_quantity": 0.0
+        },
+        {
+          "location": "KRWH/KRStock",
+          "package": "HVRF27-PALLET-001",
+          "lot": "HVRF27-SF-SN-001",
+          "quantity": 1.0,
+          "reserved_quantity": 0.0
+        }
+      ]
+    },
+    {
+      "product_id": 4645,
+      "product_code": "HVR-FINAL-20261127-RAW",
+      "quantity": 8.0,
+      "reserved_quantity": 0.0,
+      "packages": [
+        {
+          "location": "KRWH/KRStock",
+          "package": "HVRF27-PALLET-003",
+          "lot": null,
+          "quantity": 3.0,
+          "reserved_quantity": 0.0
+        },
+        {
+          "location": "KRWH/KRStock",
+          "package": "HVRF27-PALLET-001",
+          "lot": null,
+          "quantity": 5.0,
+          "reserved_quantity": 0.0
+        }
+      ]
+    }
+  ],
+  "stocktake_results": [
+    {
+      "id": 412,
+      "product_code": "HVR-FINAL-20261127-FG",
+      "serial_number": "HVRF27-FG-SN-002",
+      "quantity": 1.0,
+      "pallet_code": "HVRF27-PALLET-001",
+      "operator_login": "hvr.ginlong.operator",
+      "ginlong_operator_code": "hvr.ginlong.operator",
+      "callback_selected": true,
+      "operation_time_utc": "2026-11-27 09:37:02"
+    },
+    {
+      "id": 413,
+      "product_code": "HVR-FINAL-20261127-SF",
+      "serial_number": "HVRF27-SF-SN-001",
+      "quantity": 1.0,
+      "pallet_code": "HVRF27-PALLET-001",
+      "operator_login": "hvr.ginlong.operator",
+      "ginlong_operator_code": "hvr.ginlong.operator",
+      "callback_selected": true,
+      "operation_time_utc": "2026-11-27 09:37:02"
+    },
+    {
+      "id": 414,
+      "product_code": "HVR-FINAL-20261127-SF",
+      "serial_number": "HVRF27-SF-SN-002",
+      "quantity": 1.0,
+      "pallet_code": "HVRF27-PALLET-003",
+      "operator_login": "hvr.ginlong.operator",
+      "ginlong_operator_code": "hvr.ginlong.operator",
+      "callback_selected": true,
+      "operation_time_utc": "2026-11-27 09:37:02"
+    },
+    {
+      "id": 415,
+      "product_code": "HVR-FINAL-20261127-FG",
+      "serial_number": "HVRF27-FG-SN-004",
+      "quantity": 1.0,
+      "pallet_code": "HVRF27-PALLET-003",
+      "operator_login": "hvr.ginlong.operator",
+      "ginlong_operator_code": "hvr.ginlong.operator",
+      "callback_selected": true,
+      "operation_time_utc": "2026-11-27 09:37:02"
+    },
+    {
+      "id": 416,
+      "product_code": "HVR-FINAL-20261127-RAW",
+      "serial_number": null,
+      "quantity": 5.0,
+      "pallet_code": "HVRF27-PALLET-001",
+      "operator_login": "hvr.ginlong.operator",
+      "ginlong_operator_code": "hvr.ginlong.operator",
+      "callback_selected": true,
+      "operation_time_utc": "2026-11-27 09:37:02"
+    },
+    {
+      "id": 417,
+      "product_code": "HVR-FINAL-20261127-RAW",
+      "serial_number": null,
+      "quantity": 3.0,
+      "pallet_code": "HVRF27-PALLET-003",
+      "operator_login": "hvr.ginlong.operator",
+      "ginlong_operator_code": "hvr.ginlong.operator",
+      "callback_selected": true,
+      "operation_time_utc": "2026-11-27 09:37:02"
+    }
+  ]
+}

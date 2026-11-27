@@ -1,0 +1,300 @@
+{
+  "suite": "Ginlong Project Business Flow HVR",
+  "status": "NOT RUN",
+  "owner": "HVR01-20261121-OWNER-A",
+  "warehouse": "KRWH",
+  "project": "HVR01-20261121 API01 HVR Project",
+  "shared_product_code": "HVR-PROJECT-FLOW-20261125-SN-001",
+  "cases": [
+    {
+      "seq": 1,
+      "id": "FLOW-07",
+      "api": "API07",
+      "kind": "inbound_http",
+      "payload": "payloads/api07_add_shared_product.json",
+      "depends_on": [],
+      "expected": "product variant exists; productForm=成品; tracking=serial"
+    },
+    {
+      "seq": 2,
+      "id": "FLOW-09A",
+      "api": "API09",
+      "kind": "inbound_http_readonly",
+      "payload": "payloads/api09_owner_warehouse_query.json",
+      "depends_on": [
+        "FLOW-07"
+      ],
+      "expected": "new shared SKU has no positive stock; no stock writes"
+    },
+    {
+      "seq": 3,
+      "id": "FLOW-01",
+      "api": "API01",
+      "kind": "inbound_http",
+      "payload": "payloads/api01_add_inbound.json",
+      "depends_on": [
+        "FLOW-07",
+        "FLOW-09A"
+      ],
+      "expected": "one inbound order line quantity 2; no picking/lot/package/stock"
+    },
+    {
+      "seq": 4,
+      "id": "FLOW-02N",
+      "api": "API02",
+      "kind": "odoo_button_http",
+      "payload": null,
+      "expected_template": "expected/api02_planning.json",
+      "depends_on": [
+        "FLOW-01"
+      ],
+      "expected": "planning maps to receiptConfirmed=N"
+    },
+    {
+      "seq": 5,
+      "id": "FLOW-02Y",
+      "api": "API02",
+      "kind": "odoo_business_action_then_button_http",
+      "payload": null,
+      "expected_template": "expected/api02_received.json",
+      "depends_on": [
+        "FLOW-02N"
+      ],
+      "expected": "actual receive confirmation changes order business status; callback Y; no inventory posting"
+    },
+    {
+      "seq": 6,
+      "id": "FLOW-IN",
+      "api": "WMS",
+      "kind": "actual_incoming_picking",
+      "payload": null,
+      "depends_on": [
+        "FLOW-02Y"
+      ],
+      "expected": "two actual SN move lines quantity 1 each, one actual package, Done picking posts +2"
+    },
+    {
+      "seq": 7,
+      "id": "FLOW-04",
+      "api": "API04",
+      "kind": "odoo_button_http",
+      "payload": null,
+      "expected_template": "expected/api04_inbound.json",
+      "depends_on": [
+        "FLOW-IN"
+      ],
+      "expected": "one event per Done/Incoming picking; data sourced from actual move lines"
+    },
+    {
+      "seq": 8,
+      "id": "FLOW-09B",
+      "api": "API09",
+      "kind": "inbound_http_readonly",
+      "payload": "payloads/api09_owner_warehouse_query.json",
+      "depends_on": [
+        "FLOW-IN"
+      ],
+      "expected": "shared SKU physical stock quantity 2; the API04 callback is reported separately and does not create stock"
+    },
+    {
+      "seq": 9,
+      "id": "FLOW-03",
+      "api": "API03",
+      "kind": "inbound_http",
+      "payload": "payloads/api03_add_outbound.json",
+      "depends_on": [
+        "FLOW-07",
+        "FLOW-09B"
+      ],
+      "expected": "same owner+warehouse+product; creates only outbound order, no picking/reservation/stock change"
+    },
+    {
+      "seq": 10,
+      "id": "FLOW-OUT-PICK",
+      "api": "WMS",
+      "kind": "actual_outgoing_pick_operation",
+      "payload": null,
+      "depends_on": [
+        "FLOW-03",
+        "FLOW-09B"
+      ],
+      "expected": "actual move line picks SN-001 quantity 1 from the received stock/package"
+    },
+    {
+      "seq": 11,
+      "id": "FLOW-06",
+      "api": "API06",
+      "kind": "odoo_button_http",
+      "payload": null,
+      "expected_template": "expected/api06_picking.json",
+      "depends_on": [
+        "FLOW-OUT-PICK"
+      ],
+      "expected": "one order event from saved picking/move line; weight and pallet values use saved actual data"
+    },
+    {
+      "seq": 12,
+      "id": "FLOW-SHIP",
+      "api": "WMS",
+      "kind": "actual_outgoing_picking_done",
+      "payload": null,
+      "depends_on": [
+        "FLOW-OUT-PICK"
+      ],
+      "expected": "Done outgoing picking posts -1; SN-002 remains physically on hand; the API06 callback outcome is reported separately"
+    },
+    {
+      "seq": 13,
+      "id": "FLOW-08",
+      "api": "API08",
+      "kind": "odoo_button_http",
+      "payload": null,
+      "expected_template": "expected/api08_shipment.json",
+      "depends_on": [
+        "FLOW-SHIP"
+      ],
+      "expected": "shipment confirmation from saved order business status/actual shipment records"
+    },
+    {
+      "seq": 14,
+      "id": "FLOW-09C",
+      "api": "API09",
+      "kind": "inbound_http_readonly",
+      "payload": "payloads/api09_owner_warehouse_query.json",
+      "depends_on": [
+        "FLOW-SHIP"
+      ],
+      "expected": "shared SKU physical stock quantity 1; the API08 callback is reported separately and does not create stock"
+    },
+    {
+      "seq": 15,
+      "id": "FLOW-05",
+      "api": "API05",
+      "kind": "inbound_http",
+      "payload": "payloads/api05_count_remaining_stock.json",
+      "depends_on": [
+        "FLOW-09C"
+      ],
+      "expected": "customer count order references same remaining product/SN/package; no actual result or stock change"
+    },
+    {
+      "seq": 16,
+      "id": "FLOW-COUNT",
+      "api": "WMS",
+      "kind": "actual_stocktake_result",
+      "payload": null,
+      "depends_on": [
+        "FLOW-05"
+      ],
+      "expected": "actual result is entered from the warehouse count; it is separate from plan JSON and stock.quant"
+    },
+    {
+      "seq": 17,
+      "id": "FLOW-10",
+      "api": "API10",
+      "kind": "odoo_button_http",
+      "payload": null,
+      "expected_template": "expected/api10_actual_stocktake.json",
+      "depends_on": [
+        "FLOW-COUNT"
+      ],
+      "expected": "payload reads saved/selected world.depot.stocktake.result only"
+    }
+  ],
+  "stop_rule": "Stop any case when its required business fact was not produced. A failed outbound callback does not roll back a completed WMS operation or its inventory effect; record it separately and continue only checks whose real business prerequisites exist. Never create or alter stock.quant, fabricate downstream business records, or mark blocked cases PASS.",
+  "supplemental_suites": [
+    {
+      "scope": "After the mainline; separate business keys; do not mutate the mainline order, pickings, lots/SNs, package or stock.",
+      "suites": [
+        {
+          "api": "API01",
+          "reference": "../../api01/README.md",
+          "cases": "bonded SN request validation and order lifecycle; keep closed historical HVR evidence unchanged"
+        },
+        {
+          "api": "API02",
+          "reference": "../../HVR_Callback_Repeat_Confirmation_Guide.md",
+          "cases": "repeat confirmation/cancel/re-send on the main order only after the primary event is recorded; inspect actual HTTP request count"
+        },
+        {
+          "api": "API03",
+          "reference": "../../api03/README.md",
+          "cases": "Add/Edit/Del, active-key lifecycle, owner+product mapping; use separate outboundOrderNo and do not create Picking"
+        },
+        {
+          "api": "API04",
+          "reference": "../../HVR_Callback_Repeat_Confirmation_Guide.md",
+          "cases": "repeat confirmation per Picking event; multi-Picking tests require isolated supplemental orders and their own real WMS records"
+        },
+        {
+          "api": "API05",
+          "reference": "../../api05/README.md",
+          "cases": "HVR05-01–12 request/SN validation with independent countOrderNo; do not create actual results except in the mainline FLOW-COUNT"
+        },
+        {
+          "api": "API06",
+          "reference": "../../HVR_Callback_Repeat_Confirmation_Guide.md",
+          "cases": "order-level repeat confirmation; preserve the selected actual picking lines"
+        },
+        {
+          "api": "API07",
+          "reference": "../../api07/README.md",
+          "cases": "closed HVR07-01–22 historical evidence; do not reset/re-run as part of this suite"
+        },
+        {
+          "api": "API08",
+          "reference": "../../HVR_Callback_Repeat_Confirmation_Guide.md",
+          "cases": "order-level repeat confirmation on persisted shipment details linked to actual move lines"
+        },
+        {
+          "api": "API09",
+          "reference": "../../api09/HVR_API09_Test_Cases.md",
+          "cases": "unknown owner/warehouse and missing request fields; read-only; no stock fixture creation"
+        },
+        {
+          "api": "API10",
+          "reference": "../../api10/README.md",
+          "cases": "only after actual stocktake results are saved; no plan-data or stock.quant substitute"
+        }
+      ]
+    }
+  ],
+  "supplemental_cases": [
+    {
+      "id": "API09-HVR-UNK-OWNER",
+      "api": "API09",
+      "status": "NOT RUN",
+      "payload": "payloads/api09_unknown_owner.json",
+      "depends_on": [
+        "FLOW-09B"
+      ],
+      "expected": "existing KRWH; unknown owner returns empty inventoryList and never exposes another owner stock"
+    },
+    {
+      "id": "API09-HVR-UNK-WH",
+      "api": "API09",
+      "status": "NOT RUN",
+      "payload": "payloads/api09_unknown_warehouse.json",
+      "depends_on": [
+        "FLOW-09B"
+      ],
+      "expected": "BUS01 error response has no inventoryList and never exposes KRWH stock"
+    },
+    {
+      "id": "API09-HVR-MISSING-OWNER",
+      "api": "API09",
+      "status": "NOT RUN",
+      "payload": "payloads/api09_missing_owner.json",
+      "depends_on": [],
+      "expected": "required-field error; no inventory returned or changed"
+    },
+    {
+      "id": "API09-HVR-MISSING-WH",
+      "api": "API09",
+      "status": "NOT RUN",
+      "payload": "payloads/api09_missing_warehouse.json",
+      "depends_on": [],
+      "expected": "required-field error; no inventory returned or changed"
+    }
+  ]
+}

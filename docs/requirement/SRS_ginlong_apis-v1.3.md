@@ -21,6 +21,7 @@
 | 1.1 | Frozen with Open Items | 纳入项目负责人确认的 API03 方向、Ginlong 产品模板/货主变体身份及字段归属、productForm/tracking 规则和 API09 实际物理库存口径；Human Review APPROVED；保留 v1.0 原件 |
 | 1.2 | Frozen with Open Items | API01 预报 snList 条件处理及预报/实绩边界；保留 v1.1 原件 |
 | 1.3 | Frozen with Open Items | API01/03/05 使用不含 project 的全局订单号；API07 使用 owner+productCode；取消/归档后允许新生命周期；保留历史并要求并发唯一 |
+| 1.3 Human Review 补充 | 2026-11-24 | API01/03/05 的 Edit/Del 只能作用于当前有效记录；没有有效记录时返回业务错误，不重放历史 Del 成功响应；不改接口字段及业务键 |
 
 本文件为 SRS v1.3 Frozen with Open Items。模板同步仍为 BLOCKED，沿用已批准例外，不伪记为 PASS。
 
@@ -120,6 +121,7 @@ V3.1 资料把对端称为“第三方 WMS”；本项目按 A-001 将该角色�
 
 
 16. **API01/03/05/07 Add 有效性规则（项目负责人 2026-11-24 确认）**：API01 的全局业务键为 `inboundOrderNo`，API03 为 `outboundOrderNo`，API05 为 `countOrderNo`，均不含 `project`；三个模型中 `state != cancel` 的记录有效，`state=cancel` 无效。全局判重不改变现有 project 归属和访问权限；新订单仍属于 API User 对应的 project，Delete 仍按原权限范围定位单据。API07 按 `(owner, productCode)` 定位 `product.product` 变体；`active=True` 有效，`active=False`（归档）无效。存在有效记录时 Add 必须拒绝，不论新旧 Payload 是否相同；不存在有效记录时进入原有校验和创建流程。历史成功幂等记录不得阻断取消/归档后的新 Add，也不得作为新请求成功结果重放。取消/归档只使旧记录失效，不物理删除历史业务数据或幂等审计。并发 Add 必须保证同一有效键至多一条有效记录。此规则取代 IHR-GIN-005 IHR-009（2026-11-22）中 API01 删除后仍禁止同单号重加的旧决定；旧 IHR/ATR/HVR 保留为历史证据。API07 仍无 Ginlong Delete。
+17. **API01/03/05 操作有效性（项目负责人 Human Review 补充，2026-11-24）**：Add 按第 16 条判定有效业务键；实现支持的 Edit 和 Del 必须先定位当前有效业务记录。Edit/Del 的记录范围继续遵循当前 API User 的 project 权限。Del 仅取消有效记录；如果不存在有效记录（包括仅有 `state=cancel` 的历史记录），返回业务错误，不得重放历史成功 Del 响应。该错误判断不依赖请求 Payload 是否与历史请求相同或不同。已取消的记录、历史幂等行和 API 日志完整保留。API01 的 Ginlong Action 契约仍只按 V3.2 支持 Add/Del，本补充不增加 API01 对外 Edit Action。
 
 ### 6.2 功能需求
 

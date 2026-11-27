@@ -1,0 +1,104 @@
+{
+  "captured_at_local": "2026-11-27 10:45:31 +08:00",
+  "module": {
+    "name": "ginlong_apis",
+    "installed_version": "18.0.2.0.53"
+  },
+  "ui_action": {
+    "user": "Ginlong HVR Local Tester",
+    "model": "world.depot.outbound.order",
+    "record_id": 1403,
+    "button": "回传锦浪：备货完成"
+  },
+  "business_source": {
+    "outbound_order_no": "HVR005-20261127-R8239A3-OUT-001",
+    "picking_id": 1938,
+    "picking_name": "KRWH/KROUT/00749",
+    "picking_type": "KarlRapp-WH: Delivery Orders",
+    "picking_state": "done",
+    "date_done_utc": "2026-11-27 02:22:07",
+    "move_lines": [
+      {
+        "id": 1977,
+        "product_code": "HVR005-20261127-R8239A3-FG",
+        "product_sn": "HVR005-20261127-R8239A3-FG-SN-001",
+        "quantity": 1.0,
+        "pallet_code": "HVR005-20261127-R8239A3-PALLET-001"
+      },
+      {
+        "id": 1978,
+        "product_code": "HVR005-20261127-R8239A3-SF",
+        "product_sn": "HVR005-20261127-R8239A3-SF-SN-003",
+        "quantity": 1.0,
+        "pallet_code": "HVR005-20261127-R8239A3-PALLET-003"
+      },
+      {
+        "id": 1979,
+        "product_code": "HVR005-20261127-R8239A3-RAW",
+        "product_sn": "HVR005-20261127-R8239A3-RAW",
+        "quantity": 3.0,
+        "pallet_code": "HVR005-20261127-R8239A3-PALLET-003"
+      }
+    ]
+  },
+  "http": {
+    "method": "POST",
+    "url": "http://127.0.0.1:18106/API/WMS_JSON/TPL_Picking_Completed",
+    "mock_request_count_before": 13,
+    "mock_request_count_after": 14,
+    "payload": {
+      "owner": "HVR01-20261121-OWNER-A",
+      "action": "CREATE",
+      "outboundOrderNo": "HVR005-20261127-R8239A3-OUT-001",
+      "palletQty": "2",
+      "totalWeight": "5.25",
+      "snList": [
+        {
+          "productSN": "HVR005-20261127-R8239A3-FG-SN-001",
+          "quantity": 1.0,
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+          "productCode": "HVR005-20261127-R8239A3-FG",
+          "operator": "HVR-LOCAL-TEST-OPERATOR",
+          "operationTime": "2026-11-27 02:22:07"
+        },
+        {
+          "productSN": "HVR005-20261127-R8239A3-SF-SN-003",
+          "quantity": 1.0,
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-003",
+          "productCode": "HVR005-20261127-R8239A3-SF",
+          "operator": "HVR-LOCAL-TEST-OPERATOR",
+          "operationTime": "2026-11-27 02:22:07"
+        },
+        {
+          "productSN": "HVR005-20261127-R8239A3-RAW",
+          "quantity": 3.0,
+          "palletCode": "HVR005-20261127-R8239A3-PALLET-003",
+          "productCode": "HVR005-20261127-R8239A3-RAW",
+          "operator": "HVR-LOCAL-TEST-OPERATOR",
+          "operationTime": "2026-11-27 02:22:07"
+        }
+      ]
+    },
+    "http_status": 200,
+    "response": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK",
+      "operationTime": "2026-11-27 10:45:31"
+    }
+  },
+  "odoo_audit": {
+    "api_log_id": 9508,
+    "api_log_status": "success",
+    "api_log_code": "200",
+    "idempotency_record_id": 7981,
+    "idempotency_state": "succeeded",
+    "previous_blocked_api_log_id": 9504
+  },
+  "inventory_before_and_after_api06": {
+    "FG": {"quantity": 2.0, "reserved": 0.0},
+    "SF": {"quantity": 2.0, "reserved": 0.0},
+    "RAW": {"quantity": 9.0, "reserved": 0.0}
+  },
+  "picking_deleted_or_reversed": false,
+  "result": "PASS"
+}

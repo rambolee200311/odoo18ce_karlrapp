@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+  "productName": "CC-GIN-005 独立真实 HVR 成品",
+  "specificationModel": "HVR-CC5-REAL-SN-MODEL-001",
+  "unit": "台",
+  "power": "5kW",
+  "nationalStandard": "HVR-CC5-REAL-STD-001",
+  "certificationModel": "HVR-CC5-REAL-CERT-001",
+  "productForm": "成品",
+  "weight": 1.25,
+  "length": 100,
+  "width": 80,
+  "height": 90
+}

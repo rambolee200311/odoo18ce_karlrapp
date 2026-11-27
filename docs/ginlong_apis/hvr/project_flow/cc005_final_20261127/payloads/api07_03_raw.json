@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR-GIN005-OWNER",
+  "productCode": "HVR-FINAL-20261127-RAW",
+  "productName": "HVR 最终主链原材料",
+  "specificationModel": "HVR-FINAL-RAW-MODEL",
+  "unit": "台",
+  "power": "0kW",
+  "nationalStandard": "HVR-FINAL-STD",
+  "certificationModel": "HVR-FINAL-RAW-CERT",
+  "productForm": "原材料",
+  "weight": 0.5,
+  "length": 60,
+  "width": 40,
+  "height": 30
+}

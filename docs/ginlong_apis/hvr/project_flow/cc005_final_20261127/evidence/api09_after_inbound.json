@@ -1,0 +1,46 @@
+{
+  "method": "POST",
+  "url": "http://127.0.0.1:8099/api/ginlong/TPL_Stock_Query",
+  "authentication": "Temporary token created for the existing HVR API User via Odoo ORM; revoked immediately after request; secret omitted",
+  "payloadFile": "api09_owner_warehouse.json",
+  "requestPayload": {
+    "owner": "HVR-GIN005-OWNER",
+    "warehouse": "KRWH"
+  },
+  "httpStatus": 200,
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 08:48:32",
+    "owner": "HVR-GIN005-OWNER",
+    "warehouse": "KRWH",
+    "inventoryList": [
+      {
+        "productCode": "HVR-FINAL-20261127-FG",
+        "quantity": 4.0
+      },
+      {
+        "productCode": "HVR-FINAL-20261127-RAW",
+        "quantity": 12.0
+      },
+      {
+        "productCode": "HVR-FINAL-20261127-SF",
+        "quantity": 2.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-FG",
+        "quantity": 2.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-RAW",
+        "quantity": 9.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-SF",
+        "quantity": 2.0
+      }
+    ]
+  },
+  "apiLogId": 10753,
+  "assertion": "Current-run owner+warehouse physical quantities are FG=4, SF=2, RAW=12; older test SKUs remain distinct. No reservation reduction or inventory mutation by API09."
+}

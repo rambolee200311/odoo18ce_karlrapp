@@ -1,0 +1,49 @@
+[
+  {
+    "receivedAt": "2026-11-27T17:31:41+08:00",
+    "method": "POST",
+    "path": "/API/WMS_JSON/TPL_Picking_Completed",
+    "contentType": "application/json",
+    "payload": {
+      "owner": "HVR-GIN005-OWNER",
+      "action": "CREATE",
+      "outboundOrderNo": "HVR-FINAL-20261127-OUT-01",
+      "palletQty": "2",
+      "totalWeight": "4.5",
+      "snList": [
+        {
+          "productSN": "HVRF27-FG-SN-001",
+          "quantity": 1.0,
+          "palletCode": "HVRF27-PALLET-001",
+          "productCode": "HVR-FINAL-20261127-FG",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:22:32"
+        },
+        {
+          "productSN": "HVRF27-FG-SN-003",
+          "quantity": 1.0,
+          "palletCode": "HVRF27-PALLET-002",
+          "productCode": "HVR-FINAL-20261127-FG",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:22:32"
+        },
+        {
+          "productSN": "HVR-FINAL-20261127-RAW",
+          "quantity": 4.0,
+          "palletCode": "HVRF27-PALLET-002",
+          "productCode": "HVR-FINAL-20261127-RAW",
+          "operator": "hvr.ginlong.operator",
+          "operationTime": "2026-11-27 09:22:32"
+        }
+      ]
+    },
+    "accepted": true,
+    "validationErrors": [],
+    "httpStatus": 200,
+    "mockResponse": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK",
+      "operationTime": "2026-11-27 17:31:41"
+    }
+  }
+]

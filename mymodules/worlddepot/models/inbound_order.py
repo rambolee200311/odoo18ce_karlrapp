@@ -218,16 +218,14 @@ class InboundOrder(models.Model):
         return True
 
     def action_confirm(self):
-        """Confirm the order."""
+        """确认入库订单并记录确认用户和时间。"""
         for record in self:
             # Ensure owner and project are filled
             if not record.owner:
                 raise UserError(_("Owner is required to confirm the order."))
             if not record.project:
                 raise UserError(_("Project is required to confirm the order."))
-            # Ensure Container No are filled
-            if not record.cntr_no:
-                raise UserError(_("Container No is required to confirm the order."))
+            # Container No 是可选的现场资料，不作为入库订单确认的前置条件。
             if record.project.is_check_origin_doc:
                 if not record.inbound_order_doc_ids:
                     raise UserError(_("At least one document is required to confirm the order."))
@@ -253,6 +251,7 @@ class InboundOrder(models.Model):
                 raise UserError(_("Only new orders can be confirmed."))
 
             record.state = 'confirm'
+
             # Record the user who confirmed
             record.confirm_user_id = self.env.user
             # Record the confirmation time in the user's timezone
@@ -273,6 +272,35 @@ class InboundOrder(models.Model):
             except Exception as e:
                 _logger.error("入库单关注者通知失败: %s | 单据: %s", str(e), record.billno)
                 # 可选：raise UserError(_("通知发送失败，请手动检查"))  # 关键业务场景可中断
+
+    def action_mark_arrived(self):
+        """记录收货确认状态和对应的 Chatter 操作日志。
+
+        参数：无。
+        返回：Odoo 客户端通知动作。
+
+        该操作只更新业务 `status`，不改变订单生命周期 `state` 或库存。
+        为确保收货确认动作本身可追溯，显式记录状态前后值、操作人和时间，
+        不单独依赖同一事务中可能合并的字段跟踪消息。
+        """
+        for record in self:
+            old_status = record.status or '空值'
+            new_status = 'arrive'
+            record.with_context(mail_notrack=True).write({'status': new_status})
+            record.message_post(
+                body=_('收货确认状态已记录：%s → %s') % (old_status, new_status),
+                subtype_xmlid='mail.mt_note',
+            )
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('收货确认'),
+                'message': _('已记录收货确认。'),
+                'type': 'success',
+                'sticky': False,
+            },
+        }
 
     def action_cancel(self):
         """Cancel the order."""
@@ -343,7 +371,7 @@ class InboundOrder(models.Model):
         return super(InboundOrder, self).unlink()
 
     def action_create_stock_picking_old(self):
-        """Create the related stock picking with packages and move lines."""
+        """按订单数据创建 Picking、托盘及 move line。"""
         for record in self:
             # Ensure the order is confirmed
             if record.state != 'confirm':
@@ -352,8 +380,6 @@ class InboundOrder(models.Model):
                 raise UserError(_("Reference must be set before creating a stock picking."))
             if not record.pick_type:
                 raise UserError(_("Picking Type is required to create a stock picking."))
-            if not record.cntr_no:
-                raise UserError(_("Container No is required to create packages."))
             # if record.stock_picking_id:
             #    raise UserError(_("Stock picking already exists for this order."))
 
@@ -380,6 +406,8 @@ class InboundOrder(models.Model):
                 'planning_date': record.a_date,
             })
             pallet_index = 1
+            # 柜号可缺省；无柜号时省略命名段，避免生成空段。
+            container_segment = f"-{record.cntr_no}" if record.cntr_no else ""
 
             # Validate total quantity for each product
             for product in record.inbound_order_product_ids:
@@ -403,7 +431,7 @@ class InboundOrder(models.Model):
 
                 # Create move.line for each pallet with individual packages
                 for p_index in range(1, int(product.pallets) + 1):
-                    package_name = f"{record.reference}-{record.cntr_no}-{str(pallet_index).zfill(4)}"
+                    package_name = f"{record.reference}{container_segment}-{str(pallet_index).zfill(4)}"
                     package = self.env['stock.quant.package'].search([('name', '=', package_name)])
                     if not package:
                         package = self.env['stock.quant.package'].create({
@@ -418,7 +446,9 @@ class InboundOrder(models.Model):
                         # create lot if product is lot tracked
                         lot = False
                         if pallet.product_id.tracking == 'lot':
-                            lot_name = f"{record.a_date.strftime('%Y%m')}-{record.cntr_no}-{str(pallet_index).zfill(4)}"
+                            # 缺少柜号时使用订单编号，确保批次仍可追溯到来源订单。
+                            lot_reference = record.cntr_no or record.reference
+                            lot_name = f"{record.a_date.strftime('%Y%m')}-{lot_reference}-{str(pallet_index).zfill(4)}"
                             lot = self.env['stock.lot'].search(
                                 [('name', '=', lot_name),
                                  ('product_id', '=', pallet.product_id.id)], limit=1)

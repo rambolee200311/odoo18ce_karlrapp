@@ -24,6 +24,28 @@ class GinlongAPIIdempotency(models.Model):
     action = fields.Char(index=True)
     business_key = fields.Char(required=True, index=True, size=512)
     event_key = fields.Char(index=True, size=512)
+    # stable_event_key 跨不同确认令牌保持不变，供同一业务事件的所有 Worker 共用协调行。
+    stable_event_key = fields.Char(index=True, size=64)
+    coordination_key = fields.Char(index=True, size=64)
+    parent_event_id = fields.Many2one(
+        "ginlong.api.idempotency", string="原回传事件", index=True, ondelete="set null",
+    )
+    # 每个稳定业务事件的每个执行代次只能生成一个发送尝试，跨用户/标签页共用此唯一槽位。
+    execution_slot = fields.Char(index=True, size=64, readonly=True)
+    confirmation_token = fields.Char(index=True, size=64)
+    confirmed_by_id = fields.Many2one("res.users", string="重复回传确认人", readonly=True)
+    confirmed_at = fields.Datetime(string="重复回传确认时间", readonly=True)
+    legacy_api_log_id = fields.Many2one(
+        "world.depot.api.log", string="历史成功日志", readonly=True, ondelete="set null",
+    )
+    execution_generation = fields.Integer(default=0, readonly=True)
+    active_execution = fields.Boolean(default=False, readonly=True)
+    last_started_at = fields.Datetime(readonly=True)
+    last_completed_at = fields.Datetime(readonly=True)
+    last_outcome_state = fields.Selection(
+        [("succeeded", "Succeeded"), ("failed", "Failed"), ("unknown", "Unknown")],
+        readonly=True,
+    )
     request_fingerprint = fields.Char(required=True, size=64, index=True)
     state = fields.Selection(
         [("processing", "Processing"), ("succeeded", "Succeeded"),
@@ -39,6 +61,21 @@ class GinlongAPIIdempotency(models.Model):
             "uniq_request",
             "unique(api_code, business_key, event_key, request_fingerprint)",
             "This Ginlong API request has already been processed.",
+        ),
+        (
+            "uniq_outbound_coordination",
+            "unique(api_code, coordination_key)",
+            "This Ginlong business event is already coordinated.",
+        ),
+        (
+            "uniq_outbound_execution_slot",
+            "unique(execution_slot)",
+            "This Ginlong business event generation already has an execution attempt.",
+        ),
+        (
+            "uniq_confirmation_token",
+            "unique(api_code, confirmation_token)",
+            "This Ginlong confirmation token has already been consumed.",
         ),
     ]
 
@@ -85,6 +122,10 @@ class ResConfigSettings(models.TransientModel):
         string="Ginlong API07 requests per second", default=100,
         config_parameter="ginlong_apis.api07_rate_limit",
     )
+    ginlong_api09_rate_limit = fields.Integer(
+        string="Ginlong API09 requests per second", default=10,
+        config_parameter="ginlong_apis.api09_rate_limit",
+    )
     ginlong_api02_callback_url = fields.Char(string="API02 回传 URL（含 objectid）", config_parameter="ginlong_apis.api02_callback_url")
     ginlong_api04_callback_url = fields.Char(string="API04 回传 URL（含 objectid）", config_parameter="ginlong_apis.api04_callback_url")
     ginlong_api06_callback_url = fields.Char(string="API06 回传 URL（含 objectid）", config_parameter="ginlong_apis.api06_callback_url")
@@ -93,7 +134,7 @@ class ResConfigSettings(models.TransientModel):
 
     @api.constrains(
         "ginlong_api01_rate_limit", "ginlong_api03_rate_limit",
-        "ginlong_api05_rate_limit", "ginlong_api07_rate_limit",
+        "ginlong_api05_rate_limit", "ginlong_api07_rate_limit", "ginlong_api09_rate_limit",
     )
     def _check_ginlong_rate_limits(self):
         """拒绝非正的限流值，避免配置后意外封锁接口或失去限流。"""
@@ -103,6 +144,7 @@ class ResConfigSettings(models.TransientModel):
                 settings.ginlong_api03_rate_limit,
                 settings.ginlong_api05_rate_limit,
                 settings.ginlong_api07_rate_limit,
+                settings.ginlong_api09_rate_limit,
             )):
                 raise ValidationError("Ginlong API rate limits must be positive integers.")
 
@@ -111,12 +153,12 @@ class ResConfigSettings(models.TransientModel):
         """读取一个 Ginlong 入站 API 的限流阈值并处理无效配置。
 
         参数：
-            api_code: API01、API03、API05 或 API07。
+            api_code: API01、API03、API05、API07 或 API09。
 
         返回：
             大于等于 1 的请求/秒整数；配置损坏时使用该接口默认值。
         """
-        defaults = {"API01": 10, "API03": 10, "API05": 10, "API07": 100}
+        defaults = {"API01": 10, "API03": 10, "API05": 10, "API07": 100, "API09": 10}
         if api_code not in defaults:
             raise ValueError("Unknown Ginlong API code: %s" % api_code)
         key = "ginlong_apis.%s_rate_limit" % api_code.lower()

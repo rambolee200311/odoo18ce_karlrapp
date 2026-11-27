@@ -1,0 +1,18 @@
+{
+  "executed_at": "2026-11-27",
+  "database": "odooce_karlrapp",
+  "installed_module_version": "18.0.2.0.54",
+  "command": "venv/bin/python odoo-bin -c odoo.conf -d odooce_karlrapp -u ginlong_apis --http-port=0 --stop-after-init --test-enable --test-tags '/ginlong_apis:TestGinlongAPI.test_api04_auto_scans_done_incoming_and_uses_picking_actuals,/ginlong_apis:TestGinlongAPI.test_api06_uses_linked_done_picking_without_manual_selection,/ginlong_apis:TestGinlongAPI.test_api10_persists_action_scope_and_uses_only_saved_actual_results' --log-level=test --logfile /tmp/ginlong_nonserial_callback_tests.log",
+  "tests": [
+    "TestGinlongAPI.test_api04_auto_scans_done_incoming_and_uses_picking_actuals",
+    "TestGinlongAPI.test_api06_uses_linked_done_picking_without_manual_selection",
+    "TestGinlongAPI.test_api10_persists_action_scope_and_uses_only_saved_actual_results"
+  ],
+  "result": {
+    "post_tests": 3,
+    "failed": 0,
+    "errors": 0,
+    "database": "odooce_karlrapp"
+  },
+  "scope_note": "仅运行 API04、API06、API10 受影响的定向 Odoo 自动化测试；未运行完整 Ginlong 全量回归。"
+}

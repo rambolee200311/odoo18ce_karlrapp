@@ -1,0 +1,15 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR05-20261122-RAW-NO-SN",
+  "warehouse": "KRWH",
+  "remark": "HVR05 SN consistency",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 3
+    }
+  ]
+}

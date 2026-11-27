@@ -1,0 +1,21 @@
+[
+  {
+    "receivedAt": "2026-11-27T17:32:26+08:00",
+    "method": "POST",
+    "path": "/API/WMS_JSON/TPL_Shipment_Completed",
+    "contentType": "application/json",
+    "payload": {
+      "outboundOrderNo": "HVR-FINAL-20261127-OUT-01",
+      "action": "CREATE",
+      "shipmentConfirmed": "Y"
+    },
+    "accepted": true,
+    "validationErrors": [],
+    "httpStatus": 200,
+    "mockResponse": {
+      "returnStatus": "Y",
+      "exceptionInfo": "OK",
+      "operationTime": "2026-11-27 17:32:26"
+    }
+  }
+]

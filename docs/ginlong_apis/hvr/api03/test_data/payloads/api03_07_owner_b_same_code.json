@@ -1,0 +1,31 @@
+{
+  "owner": "HVR01-20261121-OWNER-B",
+  "action": "Add",
+  "outboundOrderNo": "HVR03-MANUAL-20261125-PAIR-B",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "API03 HVR 同产品编码货主 B 变体匹配",
+  "customer": "HVR01-20261121 测试货主 A",
+  "details": [
+    {
+      "productCode": "HVR01-20261121-PROD-COMMON",
+      "productName": "HVR01 Ginlong 入库产品",
+      "specificationModel": "HVR01-MODEL-01",
+      "quantity": 1,
+      "net_wt_machine": 1.25,
+      "net_wt_total": 1.25,
+      "pack_qty": 1,
+      "pallet_qty": 1,
+      "pallet_len": 100,
+      "pallet_wid": 100,
+      "pallet_hgt": 100,
+      "unit_vol": 0.001,
+      "pack_unit": "台",
+      "pack_wt": 0,
+      "pallet_total_wt": 1.25,
+      "total_vol": 0.001,
+      "carton_wt_total": 1.25,
+      "gross_wt_total": 1.25
+    }
+  ]
+}

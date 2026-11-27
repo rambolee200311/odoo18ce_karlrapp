@@ -1,0 +1,29 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "outboundOrderNo": "HVR03-MANUAL-20261125-REQ",
+  "warehouse": "KRWH",
+  "customer": "HVR01-20261121 测试货主 A",
+  "details": [
+    {
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001",
+      "quantity": 1,
+      "net_wt_machine": 1.25,
+      "net_wt_total": 1.25,
+      "pack_qty": 1,
+      "pallet_qty": 1,
+      "pallet_len": 1000,
+      "pallet_wid": 800,
+      "pallet_hgt": 900,
+      "unit_vol": 0.36,
+      "pack_unit": "Units",
+      "pack_wt": 0,
+      "pallet_total_wt": 25,
+      "total_vol": 0.36,
+      "carton_wt_total": 1.25,
+      "gross_wt_total": 26.25
+    }
+  ]
+}

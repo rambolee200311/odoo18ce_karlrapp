@@ -1,0 +1,16 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "inboundOrderNo": "HVR-FLOW-20261125-IN-001",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "项目级连续业务主链：API07 创建产品后进行实际入库",
+  "details": [
+    {
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "productName": "HVR 项目级连续流程成品",
+      "specificationModel": "HVR-PROJECT-FLOW-SN-MODEL-001",
+      "quantity": 2
+    }
+  ]
+}

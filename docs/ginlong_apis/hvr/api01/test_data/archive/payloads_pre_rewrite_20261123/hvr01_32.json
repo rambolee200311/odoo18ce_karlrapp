@@ -1,0 +1,40 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "API01 SN 规则边界验收",
+  "inboundOrderNo": "HVR01-20261122-SN-R2-CROSS-PRODUCT",
+  "details": [
+    {
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL",
+      "quantity": 1
+    },
+    {
+      "productCode": "HVR01-20261122-PROD-SEMIFINISHED",
+      "productName": "HVR01 半成品序列号验收产品",
+      "specificationModel": "HVR01-SEMIFINISHED-MODEL",
+      "quantity": 1
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR01-R2-SAME-SN-DIFFERENT-PRODUCT",
+      "quantity": 1,
+      "palletCode": "HVR01-R2-PALLET-A",
+      "productCode": "HVR01-20261122-PROD-SERIAL",
+      "productName": "HVR01 成品序列号验收产品",
+      "specificationModel": "HVR01-SERIAL-MODEL"
+    },
+    {
+      "productSN": "HVR01-R2-SAME-SN-DIFFERENT-PRODUCT",
+      "quantity": 1,
+      "palletCode": "HVR01-R2-PALLET-B",
+      "productCode": "HVR01-20261122-PROD-SEMIFINISHED",
+      "productName": "HVR01 半成品序列号验收产品",
+      "specificationModel": "HVR01-SEMIFINISHED-MODEL"
+    }
+  ]
+}

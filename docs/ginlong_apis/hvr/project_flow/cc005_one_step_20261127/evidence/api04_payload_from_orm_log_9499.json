@@ -1,0 +1,79 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "CREATE",
+  "inboundOrderNo": "HVR005-20261127-R8239A3-IN-001",
+  "snList": [
+    {
+      "productSN": "HVR005-20261127-R8239A3-SF-SN-003",
+      "quantity": 1.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-003",
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": false,
+      "quantity": 3.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-003",
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-FG-SN-003",
+      "quantity": 1.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-SF-SN-002",
+      "quantity": 1.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": false,
+      "quantity": 4.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-FG-SN-001",
+      "quantity": 1.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-FG-SN-002",
+      "quantity": 1.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-SF-SN-001",
+      "quantity": 1.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    },
+    {
+      "productSN": false,
+      "quantity": 5.0,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "operator": "hvr.ginlong.local",
+      "operationTime": "2026-11-27 01:33:34"
+    }
+  ]
+}

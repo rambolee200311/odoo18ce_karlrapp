@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "CC5HVR-20261126-P001",
+  "productName": "CC-GIN-005 HVR 连续主链成品",
+  "specificationModel": "CC5HVR-20261126-MODEL-001",
+  "unit": "台",
+  "power": "5kW",
+  "nationalStandard": "CC5HVR-20261126-STD-001",
+  "certificationModel": "CC5HVR-20261126-CERT-001",
+  "productForm": "成品",
+  "weight": 1.25,
+  "length": 100,
+  "width": 80,
+  "height": 90
+}

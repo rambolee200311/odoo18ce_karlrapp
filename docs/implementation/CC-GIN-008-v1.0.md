@@ -49,7 +49,7 @@ API01/03/05 的跨 project Add 判重为全局，但 Delete/Edit 的对象定位
 | CC-TEST-074/075 | Cancel/Archive 后，相同/不同 Payload 再 Add 成功，旧对象保留 |
 | CC-TEST-076/077 | 新生命周期重复拒绝；多轮失效/重建历史均保留且最多一条有效对象 |
 | CC-TEST-078/079 | 独立事务并发提交相同/不同 Payload，恰有一个成功；失败事务无部分业务数据/幂等成功行 |
-| CC-TEST-080 | Delete 只取消当前 project 内有效订单，历史 cancel 记录不造成歧义或越权 |
+| CC-TEST-080 | Add/Edit/Del 统一遵循业务记录有效性；Delete 只取消当前 project 内有效订单，已 cancel 的历史记录不被编辑/删除、不重放成功 |
 | CC-TEST-081 | API01/03/05/07 Edit 及其余 Ginlong API 回归 |
 | CC-TEST-082 | 升级前 ORM 预检与升级后历史业务、幂等及日志保留 |
 | CC-TEST-083 | 跨 project 相同有效订单号全局冲突；错误不泄露源单据；新单 project 权限不变 |
@@ -104,3 +104,22 @@ API01/03/05 的跨 project Add 判重为全局，但 Delete/Edit 的对象定位
 | v1.0 Frozen | 2026-11-24 | Human Review APPROVED；冻结 API01/03/05/07 有效业务记录及幂等生命周期范围。 |
 | v1.0 收尾增补 | 2026-11-24 | Human Review APPROVED；接受独立数据库事务并发证据，人工 HVR 与多 Worker HTTP 改为 N/A/Deferred，纳入部署前有效键 ORM 预检、升级后历史记录保留验证及 `.42` 服务加载确认；不改变冻结业务规则。 |
 | v1.0 Closed | 2026-11-24 | Human Review APPROVED；FR-GIN-008 Closure SATISFIED；关闭 CC，模板同步例外及最终集成 Deferred 项保持原状态。 |
+
+## 9. Human Review 业务规则补充（2026-11-24）
+
+Human Review 补充决定纳入 CC-GIN-008 收尾范围：API01/03/05 的 Del 必须以当前有效业务记录为前置条件；仅有取消历史或从未有有效订单时返回业务错误，不得重放历史 Del 成功响应。相同或不同 Payload 均按当前业务有效性处理。Edit 仅修改当前 API User 项目内有效订单；API01 V3.2 Action 仍为 Add/Del。
+
+CC-TEST-080 的验收补充如下：
+
+- 首次对有效订单执行 Del：返回成功，订单保留且状态改为 `cancel`。
+- 再次对仅有取消历史的业务键执行 Del：返回 `BUS01: 有效订单不存在或已取消`；对相同 Payload 和修改后的 Payload 均成立，且不新增成功幂等记录。
+- 对取消历史执行 Edit：拒绝且业务记录保持不变（仅对现有支持的 Edit Action 验证；API01 不新增 Ginlong Edit）。
+- 使用原业务键重新 Add 后，新的有效订单可再次成功 Del；旧订单、幂等记录和 API 日志保留。
+
+此补充不改变原 CC 的业务键、历史保留、project 权限和并发要求。旧 ATR 中“重复 Del 重放成功”的记录保留为历史证据；新行为以本补充验收结果为准。
+
+### 9.1 收尾实施结果（2026-11-24）
+
+Human Review 补充已在本地实现并验证：Ginlong Odoo 全量回归 R3 为 74 post-tests、0 failed、0 error(s)，日志 `/private/tmp/ccgin008_del_validity_20261124_r3.log`。API01/03/05 的真实 HTTP/ORM 测试均验证首次 Del 成功；有效订单取消后，同/不同 Payload 再 Del 返回 `BUS01: 有效订单不存在或已取消`；被拒绝的 Del 不新增成功幂等记录；重新 Add 后对新的有效订单 Del 成功。Edit 对 cancel 历史也被拒绝。历史订单、幂等记录和 API 日志保留。
+
+模块 `18.0.2.0.43` 已加载到本地 `odooce_karlrapp` 的 8099 服务（最终重启 PID 65649；Registry loaded；`/web/login` HTTP 200）。此前 v1.0 关闭记录仍按历史保留；本节记录经批准的关闭后补充，不增加新 CC，不改变人工 HVR N/A/Deferred 及模板同步 BLOCKED 状态。

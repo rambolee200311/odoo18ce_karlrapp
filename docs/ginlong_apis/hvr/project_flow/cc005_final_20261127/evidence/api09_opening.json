@@ -1,0 +1,32 @@
+{
+  "sentAt": "2026-11-27T16:18:50+08:00",
+  "method": "POST",
+  "url": "http://127.0.0.1:8099/api/ginlong/TPL_Stock_Query",
+  "payloadFile": "api09_owner_warehouse.json",
+  "requestPayload": {
+    "owner": "HVR-GIN005-OWNER",
+    "warehouse": "KRWH"
+  },
+  "httpStatus": 200,
+  "response": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 08:18:50",
+    "owner": "HVR-GIN005-OWNER",
+    "warehouse": "KRWH",
+    "inventoryList": [
+      {
+        "productCode": "HVR005-20261127-RUN03-FG",
+        "quantity": 2.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-RAW",
+        "quantity": 9.0
+      },
+      {
+        "productCode": "HVR005-20261127-RUN03-SF",
+        "quantity": 2.0
+      }
+    ]
+  }
+}

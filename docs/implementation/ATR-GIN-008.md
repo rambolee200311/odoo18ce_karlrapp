@@ -19,6 +19,19 @@
 | HVR 可执行测试包 | N/A（本 CC 不设人工门禁） | [CC-GIN-008 HVR 包](../ginlong_apis/hvr/cc_gin_008/README.md) 保留为后续集成参考；既有 11 个 Payload 静态契约预检结果不等于人工 HVR。 |
 | 模板同步 | BLOCKED | 模板来源缺失；沿用已批准流程例外，不记为 PASS。 |
 
+## API01 Delete + Add 补充覆盖（2026-11-24）
+
+本节为关闭后按项目负责人要求补充的 API01 回归断言，不改变 CC-GIN-008 关闭状态或已批准业务规则。
+
+| 场景 | 状态 | 证据 |
+|---|---|---|
+| 首次 Add → Delete → 取消后相同报文 Add → Delete | PASS | `/private/tmp/api01_delete_add_lifecycle_targeted_r2.log`：真实 Ginlong HTTP 路由和 ORM 断言通过。 |
+| 首次有效记录取消后，不同报文 Add → Delete | PASS | 同一真实 HTTP 用例断言不同报文创建独立历史订单，随后 Delete 成功；最终三条历史单据均 cancel，0 条有效业务键，3 条 Add 与 3 条 Delete 幂等记录均保留。 |
+| 重复 Delete | PASS | 最后一轮 Delete 重发复用相同事件结果，不新增业务副作用；对应幂等记录数保持按每个业务生命周期一条。 |
+| 人工 HVR 场景 | PREPARED / NOT RUN | [HVR-008-01 API01](../ginlong_apis/hvr/cc_gin_008/HVR_GIN_008_Test_Cases.md) 已列出两轮完整生命周期；实际人工请求未执行，仍按 CC-008 的 Human Review 决定不作为其关闭门禁。 |
+
+定向测试首次运行 R1 因该测试累计 HTTP 请求超过限流窗口，后续非法字段断言得到 429 而失败；使用现有限流重置测试辅助方法隔离后，R2 为 1 post-test、0 failed、0 error。失败证据保留于 `/private/tmp/api01_delete_add_lifecycle_targeted_r1.log`。
+
 ## 运行摘要
 
 - Ginlong 模块最终完整回归：74 post-tests，0 failed，0 errors；日志：`/private/tmp/ccgin008_ginlong_full_r13.log`。
@@ -33,6 +46,22 @@
 ## 当前结论
 
 CC-GIN-008 的冻结范围验收已满足。项目负责人于 2026-11-24 批准关闭，FR-GIN-008 记录 Closure SATISFIED / Human Review APPROVED，CC 状态为 **Closed**。多 Worker HTTP 并发与独立人工 HVR 为本 CC 的 N/A，并移交最终项目集成；两项均未伪记为 PASS。部署前 ORM 有效键预检、升级后业务/幂等/API 日志保留性及本地 8099 `.42` Registry 加载均已验证。模板同步 BLOCKED 继续沿用已批准流程例外。
+
+## Human Review 补充规则收尾验收（2026-11-24）
+
+Human Review 决定：API01/03/05 的 Del 必须先判断当前有效业务记录；没有有效记录（包括仅有 cancel 历史）时返回业务错误，不重放历史成功结果。此补充纳入 CC-GIN-008 收尾，不改变 API01/03/05 的业务键、project 权限、历史保留或其他规则。以下结果更新该补充验收；早前“重复 Del 重放成功”的测试记录保留为历史，已由本规则取代。
+
+| 场景 | 状态 | 实际证据 |
+|---|---|---|
+| API01：首次 Del 成功；同/不同 Payload 再 Del 返回 `BUS01`；重新 Add 后 Del 成功 | PASS | `/private/tmp/ccgin008_del_validity_20261124_r3.log`：真实 HTTP 路由及 ORM 断言；订单历史、有效键、幂等行均核对 |
+| API03：首次 Del 成功；同/不同 Payload 再 Del 返回 `BUS01`；取消后 Edit 被拒；重新 Add 后 Del 成功 | PASS | 同一 R3 全模块测试日志；`test_http_api03_valid_owner_product_add_edit_delete_and_rejection` |
+| API05：首次 Del 成功；同/不同 Payload 再 Del 返回 `BUS01`；取消后 Edit 被拒；相同及不同 Payload 重新 Add 后均可 Del | PASS | 同一 R3 全模块测试日志；`test_http_api05_add_repeatable_edit_and_delete` |
+| 重复 Del 不新增成功幂等记录；历史订单及既有幂等记录保留 | PASS | 三个 HTTP 用例均核对 Del 幂等记录数、cancel 历史；拒绝重试不增加成功记录 |
+| Ginlong 完整自动化回归 | PASS | R3：74 post-tests、0 failed、0 error(s)，14,126 queries；完整命令及日志见 IHR |
+| 8099 重启后模块版本 | PASS | ORM 只读显示 `installed / 18.0.2.0.43`；最终重启 PID 65649 的 Registry 加载日志及 `/web/login` HTTP 200 |
+| 人工 HVR | N/A（本 CC）/ Deferred（最终集成） | 沿用 Human Review 对 CC-GIN-008 的决定；本轮未执行人工 HVR |
+
+R1 首轮回归保留失败证据：API05 用例连续请求触发测试限流，导致重新 Add 收到 429 并产生 1 个测试 error；不是业务错误。测试改用现有限流重置辅助方法后，R2 全量回归为 74 post-tests、0 failed、0 error。之后为 API05 增加“不同 Payload 重新 Add 后 Del 成功”断言，R3 再次全量回归通过。模板同步仍 BLOCKED，沿用批准例外。
 
 ## Human Review 收尾决定（2026-11-24）
 

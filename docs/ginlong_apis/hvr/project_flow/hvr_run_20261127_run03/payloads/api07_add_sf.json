@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR-GIN005-OWNER",
+  "productCode": "HVR005-20261127-RUN03-SF",
+  "productName": "RUN03 HVR 半成品 B",
+  "specificationModel": "RUN03-SF-MODEL",
+  "unit": "台",
+  "productForm": "半成品",
+  "power": 0,
+  "nationalStandard": "HVR",
+  "certificationModel": "RUN03-SF",
+  "weight": 2.5,
+  "length": 100,
+  "width": 50,
+  "height": 40
+}

@@ -413,6 +413,52 @@ def _ensure_order_add_is_new(env, api_code, payload):
         )
 
 
+def _find_active_order_for_delete(env, api_code, project, payload):
+    """仅在当前 API User 的项目内定位可取消的有效业务订单。
+
+    参数：
+        env: 当前 Odoo Environment。
+        api_code: API01、API03 或 API05。
+        project: 当前认证 API User 所属的 WMS 项目。
+        payload: 已完成字段校验并规范化 Action 的请求。
+
+    返回：
+        唯一的有效订单记录。
+
+    异常：
+        没有有效订单或有效订单记录不唯一时抛出统一业务错误；历史 cancel
+        记录只保留审计用途，不能授权新的 Del 操作或重放旧成功响应。
+    """
+    specifications = {
+        "API01": ("world.depot.inbound.order", "reference", "inboundOrderNo", "project"),
+        "API03": ("world.depot.outbound.order", "reference", "outboundOrderNo", "project"),
+        "API05": ("world.depot.stocktake.order", "count_order_no", "countOrderNo", "project_id"),
+    }
+    model_name, key_field, payload_field, project_field = specifications[api_code]
+    business_key = payload[payload_field]
+    domain = [
+        (key_field, "=", business_key),
+        (project_field, "=", project.id),
+        ("state", "!=", "cancel"),
+    ]
+    records = env[model_name].sudo().search(domain, order="id desc", limit=2)
+    if not records:
+        raise make_error(
+            "BUS01",
+            message="有效订单不存在或已取消",
+            details="API%s Del requires an active order: %s=%s, project_id=%s"
+            % (api_code, payload_field, business_key, project.id),
+        )
+    if len(records) != 1:
+        raise make_error(
+            "BUS01",
+            message="有效订单记录不唯一",
+            details="API%s Del found multiple active orders: %s=%s, project_id=%s, ids=%s"
+            % (api_code, payload_field, business_key, project.id, records.ids),
+        )
+    return records
+
+
 def lifecycle_event_key(env, api_user, api_code, payload):
     """提供当前入站业务周期的事件键，并先按适配器规则拒绝有效 Add。
 
@@ -429,24 +475,9 @@ def lifecycle_event_key(env, api_user, api_code, payload):
         return "%s:add:%s" % (api_code, uuid.uuid4().hex)
 
     if action == "DELETE" and api_code in {"API01", "API03", "API05"}:
-        # 只读取当前接口的业务键；字典值若直接索引 payload，会提前求值其他 API 的字段。
-        specifications = {
-            "API01": ("world.depot.inbound.order", "reference", "inboundOrderNo", "project"),
-            "API03": ("world.depot.outbound.order", "reference", "outboundOrderNo", "project"),
-            "API05": ("world.depot.stocktake.order", "count_order_no", "countOrderNo", "project_id"),
-        }
-        model_name, key_field, payload_field, project_field = specifications[api_code]
-        key_value = payload[payload_field]
-        domain = [(key_field, "=", key_value), (project_field, "=", project.id)]
-        model = env[model_name].sudo()
-        current = model.search(domain + [("state", "!=", "cancel")], order="id desc", limit=1)
-        if not current:
-            # 取消后的重发仍使用该业务记录身份，使同一次 Delete 可安全重放；
-            # 后续 Add 创建新记录后，新的 Delete 会获得不同身份。
-            current = model.search(domain + [("state", "=", "cancel")], order="id desc", limit=1)
-        if current:
-            return "%s:delete:%s" % (api_code, current.id)
-        return "%s:delete:missing:%s:%s" % (api_code, project.id, key_value)
+        # Delete 每次都先验证当前有效对象；取消历史不再作为事件身份回放成功结果。
+        current = _find_active_order_for_delete(env, api_code, project, payload)
+        return "%s:delete:%s" % (api_code, current.id)
     return False
 
 
@@ -487,15 +518,11 @@ def _find_product(env, product_code, owner_code=None):
     return products
 
 
-def _find_one_by_reference(model, project, reference, label, include_cancelled=False):
-    """在当前 WMS 项目内定位单据；仅 Delete 重试可包含已取消记录。"""
+def _find_one_by_reference(model, project, reference, label):
+    """在当前 WMS 项目内定位有效单据；cancel 历史不作为编辑或删除目标。"""
     base_domain = [("project", "=", project.id), ("reference", "=", reference)]
     order_model = model.sudo()
     records = order_model.search(base_domain + [("state", "!=", "cancel")], limit=2)
-    if not records and include_cancelled:
-        records = order_model.search(
-            base_domain + [("state", "=", "cancel")], order="id desc", limit=2,
-        )
     if len(records) != 1:
         reason = "not found" if not records else "ambiguous"
         raise ValidationError("%s %s is %s in this WMS project" % (label, reference, reason))
@@ -518,11 +545,8 @@ def api01(env, api_user, payload):
     order_model = env["world.depot.inbound.order"]
 
     if action == "DELETE":
-        order = _find_one_by_reference(
-            order_model, project, payload["inboundOrderNo"], "Inbound order", include_cancelled=True,
-        )
-        if order.state != "cancel":
-            order.write({"state": "cancel"})
+        order = _find_active_order_for_delete(env, "API01", project, payload)
+        order.write({"state": "cancel"})
         return {"success": True, "data": {"action": external_action, "inboundOrderNo": payload["inboundOrderNo"]}}
 
     if action == "CREATE":
@@ -629,11 +653,8 @@ def api03(env, api_user, payload):
     order_model = env["world.depot.outbound.order"]
 
     if action == "DELETE":
-        order = _find_one_by_reference(
-            order_model, project, payload["outboundOrderNo"], "Outbound order", include_cancelled=True,
-        )
-        if order.state != "cancel":
-            order.write({"state": "cancel"})
+        order = _find_active_order_for_delete(env, "API03", project, payload)
+        order.write({"state": "cancel"})
         return {"success": True, "data": {"action": external_action, "outboundOrderNo": payload["outboundOrderNo"]}}
 
     if action == "CREATE":
@@ -752,20 +773,8 @@ def api05(env, api_user, payload):
     task_model = env["world.depot.stocktake.order"].sudo()
 
     if action == "DELETE":
-        task_domain = [
-            ("project_id", "=", project.id),
-            ("count_order_no", "=", payload["countOrderNo"]),
-        ]
-        tasks = task_model.search(task_domain + [("state", "!=", "cancel")], limit=2)
-        if not tasks:
-            tasks = task_model.search(
-                task_domain + [("state", "=", "cancel")], order="id desc", limit=2,
-            )
-        if len(tasks) != 1:
-            reason = "not found" if not tasks else "ambiguous"
-            raise ValidationError("Stocktake task %s is %s in this WMS project" % (payload["countOrderNo"], reason))
-        if tasks.state != "cancel":
-            tasks.write({"state": "cancel"})
+        tasks = _find_active_order_for_delete(env, "API05", project, payload)
+        tasks.write({"state": "cancel"})
         return {"success": True, "data": {"action": external_action, "countOrderNo": payload["countOrderNo"]}}
 
     details = payload.get("details")

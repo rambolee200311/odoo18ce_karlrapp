@@ -2,8 +2,8 @@
 
 | 项目 | 内容 |
 |---|---|
-| 版本 | v2.9 |
-| 日期 | 2026-11-18 |
+| 版本 | v3.0 |
+| 日期 | 2026-11-23 |
 | 状态 | 项目用户确认的架构认知 |
 | 适用范围 | `ginlong_apis`、`karlrapp_gateway`、现有 Odoo WMS 及三系统集成开发 |
 
@@ -145,6 +145,15 @@ Ginlong (Solis)
 - 其他协议或字段存在歧义时列出具体问题，不自行补造值域、汇总口径或序列化规则。
 - API07 的产品识别键为 `owner + productCode`。允许不同 owner 使用相同 `default_code`；不建立 Ginlong 产品映射模型。所有受影响的 WMS 查询需按现有货主关联消歧，重复码无法唯一定位时返回明确歧义，不得用 `limit=1` 任意选取。
 
+### 5.1.2 API01/API05 产品明细、SN 与托盘对应
+
+- SN 管理产品以 `productSN` 表示真实序列号；每条记录 `quantity=1`。
+- 非 SN 管理原材料以 `productSN=productCode` 表示该产品在一个托盘上的数量；该行 `quantity` 是托盘实物数，可大于 1。
+- API01/API05 对每个产品汇总 `snList[].quantity`，并要求等于相同 `productCode` 的 `details[].quantity`。
+- 原材料允许跨托盘重复同一个 `(productCode, productSN)`，因为它表示不同托盘上的分配行；每条 `palletCode` 必须保存，不能折叠为仅有产品总量。
+- 真实 SN 管理产品仍按 `(productCode, productSN)` 在同一请求内判断重复；`palletCode` 不改变 SN 身份。
+- API01/API05 校验失败时整单拒绝，不留下部分业务记录；入库指令和盘点指令不代表实际仓库执行或库存调整。
+
 ### 5.3 Odoo 视图交互：Wizard 与标准 Form
 
 必须按数据是否需要长期保存来选择界面形态，不以 `TransientModel` Wizard 代替持久化业务表单。
@@ -229,3 +238,4 @@ Ginlong 入站 UPDATE 复用对应现有 WMS 业务模型的修改逻辑；`audi
 | v2.7 | 2026-11-18 | 明确 API09 先以 owner 编码查找 `res.partner.ginlong_owner_code` 并按 `stock.quant.owner_id` 隔离；记录仓库短码长度与 Ginlong 40 字符字段的兼容性待确认。 |
 | v2.8 | 2026-11-18 | 明确 API01 可按 owner 编码复用或创建货主档案并关联入库单；API03 必须按 owner+productCode 找现有产品，缺失拒绝且不自动创建产品，产品由 API07 维护。 |
 | v2.9 | 2026-11-18 | 记录项目负责人授权并实施 API01/03 货主规则：API01 按货主编码复用或创建唯一货主档案并关联订单；API03 只接受已存在货主及货主+产品组合，缺失时拒绝订单，不创建产品。 |
+| v3.0 | 2026-11-23 | 明确 API01/API05 原材料使用 `productSN=productCode` 按托盘保存数量、允许相同伪 SN 跨托盘重复、所有产品逐编码核对 details 与 snList 汇总且保留托盘分布；真实 SN 仍单件数量为 1。 |

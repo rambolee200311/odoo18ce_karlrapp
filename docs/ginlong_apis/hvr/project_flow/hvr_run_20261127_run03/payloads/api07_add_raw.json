@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR-GIN005-OWNER",
+  "productCode": "HVR005-20261127-RUN03-RAW",
+  "productName": "RUN03 HVR 原材料 C",
+  "specificationModel": "RUN03-RAW-MODEL",
+  "unit": "台",
+  "productForm": "原材料",
+  "power": 0,
+  "nationalStandard": "HVR",
+  "certificationModel": "RUN03-RAW",
+  "weight": 0.5,
+  "length": 100,
+  "width": 50,
+  "height": 40
+}

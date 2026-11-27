@@ -1,0 +1,77 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR005-20261127-R8239A3-COUNT-001",
+  "warehouse": "KRWH",
+  "remark": "CC-GIN-005 出库后实际剩余库存盘点 R8239A3",
+  "details": [
+    {
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "productName": "R8239A3 HVR 成品 A",
+      "specificationModel": "R8239A3-FG-MODEL",
+      "quantity": 2
+    },
+    {
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "productName": "R8239A3 HVR 半成品 B",
+      "specificationModel": "R8239A3-SF-MODEL",
+      "quantity": 2
+    },
+    {
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "productName": "R8239A3 HVR 原材料 C",
+      "specificationModel": "R8239A3-RAW-MODEL",
+      "quantity": 9
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR005-20261127-R8239A3-FG-SN-002",
+      "quantity": 1,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "productName": "R8239A3 HVR 成品 A",
+      "specificationModel": "R8239A3-FG-MODEL"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-FG-SN-003",
+      "quantity": 1,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+      "productCode": "HVR005-20261127-R8239A3-FG",
+      "productName": "R8239A3 HVR 成品 A",
+      "specificationModel": "R8239A3-FG-MODEL"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-SF-SN-001",
+      "quantity": 1,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "productName": "R8239A3 HVR 半成品 B",
+      "specificationModel": "R8239A3-SF-MODEL"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-SF-SN-002",
+      "quantity": 1,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+      "productCode": "HVR005-20261127-R8239A3-SF",
+      "productName": "R8239A3 HVR 半成品 B",
+      "specificationModel": "R8239A3-SF-MODEL"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-RAW",
+      "quantity": 5,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-001",
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "productName": "R8239A3 HVR 原材料 C",
+      "specificationModel": "R8239A3-RAW-MODEL"
+    },
+    {
+      "productSN": "HVR005-20261127-R8239A3-RAW",
+      "quantity": 4,
+      "palletCode": "HVR005-20261127-R8239A3-PALLET-002",
+      "productCode": "HVR005-20261127-R8239A3-RAW",
+      "productName": "R8239A3 HVR 原材料 C",
+      "specificationModel": "R8239A3-RAW-MODEL"
+    }
+  ]
+}

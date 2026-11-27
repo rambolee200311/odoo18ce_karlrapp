@@ -1,0 +1,1 @@
+{"receivedAt": "2026-11-26T16:08:34+08:00", "method": "POST", "path": "/API/WMS_JSON/TPL_Shipment_Completed", "contentType": "application/json", "payload": {"outboundOrderNo": "HVR-FLOW-API08-PALLET-20261126-01", "action": "CREATE", "shipmentConfirmed": "Y"}, "result": "request accepted; response deliberately dropped for HVR unknown-result simulation"}

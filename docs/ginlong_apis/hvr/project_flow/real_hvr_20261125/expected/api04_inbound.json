@@ -1,0 +1,23 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "CREATE",
+  "inboundOrderNo": "HVR-CC5-REAL-20261125-CC0B80-IN-001",
+  "snList": [
+    {
+      "productSN": "HVR-CC5-REAL-20261125-CC0B80-SERIAL-001",
+      "quantity": 1,
+      "palletCode": "HVR-CC5-REAL-20261125-CC0B80-PALLET-001",
+      "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+      "operator": "<实际 Picking 确认人编码>",
+      "operationTime": "<Done Picking 的 date_done>"
+    },
+    {
+      "productSN": "HVR-CC5-REAL-20261125-CC0B80-SERIAL-002",
+      "quantity": 1,
+      "palletCode": "HVR-CC5-REAL-20261125-CC0B80-PALLET-001",
+      "productCode": "HVR-CC5-REAL-20261125-CC0B80-SN-001",
+      "operator": "<实际 Picking 确认人编码>",
+      "operationTime": "<Done Picking 的 date_done>"
+    }
+  ]
+}

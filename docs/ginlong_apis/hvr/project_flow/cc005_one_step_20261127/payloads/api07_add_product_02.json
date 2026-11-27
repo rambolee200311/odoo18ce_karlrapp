@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR01-20261121-OWNER-A",
+  "productCode": "HVR005-20261127-R8239A3-SF",
+  "productName": "R8239A3 HVR 半成品 B",
+  "specificationModel": "R8239A3-SF-MODEL",
+  "unit": "台",
+  "productForm": "半成品",
+  "power": 2,
+  "nationalStandard": "HVR",
+  "certificationModel": "R8239A3-SF",
+  "weight": 2.5,
+  "length": 90,
+  "width": 45,
+  "height": 35
+}

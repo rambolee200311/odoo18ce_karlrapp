@@ -1,0 +1,15 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "Add",
+  "countOrderNo": "HVR-FLOW-20261125-COUNT-001",
+  "snList": [
+    {
+      "productSN": "<仓库实际采集的 SN；预期为 HVR-FLOW-SN-002>",
+      "quantity": 1,
+      "palletCode": "<实盘结果中保存的实际托盘码>",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "operator": "<实盘结果 ginlong_operator_code>",
+      "operationTime": "<实盘结果 operation_time>"
+    }
+  ]
+}

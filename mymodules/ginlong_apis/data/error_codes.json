@@ -28,6 +28,10 @@
       "message": "API认证失败",
       "diagnostic": "Authentication rejected: {details}"
     },
+    "AUTH02": {
+      "message": "API User无访问资格",
+      "diagnostic": "Authenticated Odoo user has no active Ginlong API User: {details}"
+    },
     "RATE01": {
       "message": "API请求频率超限",
       "diagnostic": "Rate limit rejected: {details}"

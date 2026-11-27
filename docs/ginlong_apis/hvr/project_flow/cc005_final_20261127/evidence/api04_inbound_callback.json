@@ -1,0 +1,93 @@
+{
+  "receivedAt": "2026-11-27T16:47:05+08:00",
+  "method": "POST",
+  "path": "/API/WMS_JSON/TPL_Inbound_Completion",
+  "contentType": "application/json",
+  "payload": {
+    "owner": "HVR-GIN005-OWNER",
+    "action": "CREATE",
+    "inboundOrderNo": "HVR-FINAL-20261127-IN-01",
+    "snList": [
+      {
+        "productSN": "HVRF27-FG-SN-004",
+        "quantity": 1,
+        "palletCode": "HVRF27-PALLET-003",
+        "productCode": "HVR-FINAL-20261127-FG",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVRF27-SF-SN-002",
+        "quantity": 1,
+        "palletCode": "HVRF27-PALLET-003",
+        "productCode": "HVR-FINAL-20261127-SF",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVR-FINAL-20261127-RAW",
+        "quantity": 3,
+        "palletCode": "HVRF27-PALLET-003",
+        "productCode": "HVR-FINAL-20261127-RAW",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVRF27-FG-SN-003",
+        "quantity": 1,
+        "palletCode": "HVRF27-PALLET-002",
+        "productCode": "HVR-FINAL-20261127-FG",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVR-FINAL-20261127-RAW",
+        "quantity": 4,
+        "palletCode": "HVRF27-PALLET-002",
+        "productCode": "HVR-FINAL-20261127-RAW",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVRF27-FG-SN-001",
+        "quantity": 1,
+        "palletCode": "HVRF27-PALLET-001",
+        "productCode": "HVR-FINAL-20261127-FG",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVRF27-FG-SN-002",
+        "quantity": 1,
+        "palletCode": "HVRF27-PALLET-001",
+        "productCode": "HVR-FINAL-20261127-FG",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVRF27-SF-SN-001",
+        "quantity": 1,
+        "palletCode": "HVRF27-PALLET-001",
+        "productCode": "HVR-FINAL-20261127-SF",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      },
+      {
+        "productSN": "HVR-FINAL-20261127-RAW",
+        "quantity": 5,
+        "palletCode": "HVRF27-PALLET-001",
+        "productCode": "HVR-FINAL-20261127-RAW",
+        "operator": "hvr.ginlong.operator",
+        "operationTime": "2026-11-27 08:46:15"
+      }
+    ]
+  },
+  "accepted": true,
+  "validationErrors": [],
+  "httpStatus": 200,
+  "mockResponse": {
+    "returnStatus": "Y",
+    "exceptionInfo": "OK",
+    "operationTime": "2026-11-27 16:47:05"
+  }
+}

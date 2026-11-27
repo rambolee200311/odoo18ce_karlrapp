@@ -1,0 +1,16 @@
+{
+  "action": "Add",
+  "owner": "HVR-GIN005-OWNER",
+  "productCode": "HVR-REAL-20261128-RAW",
+  "productName": "HVR 真实人工验收原材料",
+  "specificationModel": "HVR-REAL-RAW-MODEL",
+  "unit": "台",
+  "power": "0kW",
+  "nationalStandard": "HVR-REAL-STD",
+  "certificationModel": "HVR-REAL-RAW-CERT",
+  "productForm": "原材料",
+  "weight": 0.5,
+  "length": 60,
+  "width": 40,
+  "height": 30
+}

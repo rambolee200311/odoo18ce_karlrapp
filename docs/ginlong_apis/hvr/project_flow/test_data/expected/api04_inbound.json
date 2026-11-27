@@ -1,0 +1,23 @@
+{
+  "owner": "HVR01-20261121-OWNER-A",
+  "action": "CREATE",
+  "inboundOrderNo": "HVR-FLOW-20261125-IN-001",
+  "snList": [
+    {
+      "productSN": "HVR-FLOW-SN-001",
+      "quantity": 1,
+      "palletCode": "HVR-FLOW-PALLET-001",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "operator": "<实际 Picking 确认人 login>",
+      "operationTime": "<该 Done Picking 的 date_done>"
+    },
+    {
+      "productSN": "HVR-FLOW-SN-002",
+      "quantity": 1,
+      "palletCode": "HVR-FLOW-PALLET-001",
+      "productCode": "HVR-PROJECT-FLOW-20261125-SN-001",
+      "operator": "<实际 Picking 确认人 login>",
+      "operationTime": "<该 Done Picking 的 date_done>"
+    }
+  ]
+}

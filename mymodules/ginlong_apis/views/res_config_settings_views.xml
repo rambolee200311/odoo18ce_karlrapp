@@ -21,6 +21,9 @@
                         <setting string="API07 产品档案" help="同一认证 API 用户每秒允许的 API07 请求数。">
                             <field name="ginlong_api07_rate_limit"/>
                         </setting>
+                        <setting string="API09 库存查询" help="同一认证 API 用户每秒允许的 API09 请求数。">
+                            <field name="ginlong_api09_rate_limit"/>
+                        </setting>
                     </block>
                     <block title="回传 API Endpoint（固定 POST，JSON）" name="ginlong_callback_endpoints">
                         <setting string="API02 收货确认">

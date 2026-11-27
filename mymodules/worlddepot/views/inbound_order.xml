@@ -102,6 +102,7 @@
                 <header>
 <!--                    <button name="save_record" type="object" string="Save" class="btn-primary" invisible="state!='new'"/>-->
                     <button name="action_confirm" type="object" string="Confirm" class="btn-primary" invisible="state!='new'"/>
+                    <button name="action_mark_arrived" type="object" string="收货确认" class="btn-primary"/>
                     <button name="action_unconfirm" type="object" string="UnConfirm" class="btn-primary" invisible="state!='confirm'"/>
                     <button name="action_cancel" type="object" string="Cancel" class="btn-secondary" invisible="state not in ['new', 'confirm']"/>
                     <field name="state" widget="statusbar" statusbar_visible="new,confirm"/>

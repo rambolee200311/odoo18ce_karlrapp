@@ -1,0 +1,26 @@
+{
+  "owner": "HVR01-20261122-OWNER-AUTO-R1",
+  "action": "Add",
+  "inboundOrderNo": "HVR01-20261122-R1-IN-AUTO",
+  "warehouse": "KRWH",
+  "businessType": "STANDARD",
+  "remark": "API01 HVR R1 新货主自动建档",
+  "details": [
+    {
+      "productCode": "HVR01-20261122-PROD-AUTO-R1",
+      "productName": "HVR01 API01 自动建档复测产品",
+      "specificationModel": "HVR01-AUTO-R1-MODEL",
+      "quantity": 3
+    }
+  ],
+  "snList": [
+    {
+      "productSN": "HVR01-20261122-R1-AUTO-SN-001",
+      "quantity": 3,
+      "palletCode": "HVR01-20261121-IN-AUTO-OWNER-PALLET-01",
+      "productCode": "HVR01-20261122-PROD-AUTO-R1",
+      "productName": "HVR01 API01 自动建档复测产品",
+      "specificationModel": "HVR01-AUTO-R1-MODEL"
+    }
+  ]
+}

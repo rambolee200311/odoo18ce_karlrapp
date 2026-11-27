@@ -1,0 +1,89 @@
+[
+  {
+    "id": "HVR05-01",
+    "title": "SN 与非 SN 产品混合明细且 SN 数量匹配",
+    "payload": "test_data/payloads/hvr05_01.json",
+    "curl": "test_data/curl/hvr05_01.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-02",
+    "title": "SN 管理产品缺少 snList",
+    "payload": "test_data/payloads/hvr05_02.json",
+    "curl": "test_data/curl/hvr05_02.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-03",
+    "title": "SN 汇总数量不足",
+    "payload": "test_data/payloads/hvr05_03.json",
+    "curl": "test_data/curl/hvr05_03.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-04",
+    "title": "SN 汇总数量超出",
+    "payload": "test_data/payloads/hvr05_04.json",
+    "curl": "test_data/curl/hvr05_04.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-05",
+    "title": "SN productCode 不属于请求明细",
+    "payload": "test_data/payloads/hvr05_05.json",
+    "curl": "test_data/curl/hvr05_05.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-06",
+    "title": "同一产品出现重复 SN",
+    "payload": "test_data/payloads/hvr05_06.json",
+    "curl": "test_data/curl/hvr05_06.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-07",
+    "title": "SN 记录缺少必填 productSN",
+    "payload": "test_data/payloads/hvr05_07.json",
+    "curl": "test_data/curl/hvr05_07.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-08",
+    "title": "非 SN 管理原材料省略 snList",
+    "payload": "test_data/payloads/hvr05_08.json",
+    "curl": "test_data/curl/hvr05_08.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-09",
+    "title": "两个 SN 管理产品仅提交一个产品的 SN 清单",
+    "payload": "test_data/payloads/hvr05_09.json",
+    "curl": "test_data/curl/hvr05_09.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-10",
+    "title": "盘点指令引用实际入库 SN 及尚未入库 SN",
+    "payload": "test_data/payloads/hvr05_10.json",
+    "curl": "test_data/curl/hvr05_10.sh",
+    "auth_mode": "valid",
+    "depends_on": [
+      "FLOW-IN"
+    ]
+  },
+  {
+    "id": "HVR05-11",
+    "title": "不同 productCode 可在盘点指令中使用相同 productSN",
+    "payload": "test_data/payloads/hvr05_11.json",
+    "curl": "test_data/curl/hvr05_11.sh",
+    "auth_mode": "valid"
+  },
+  {
+    "id": "HVR05-12",
+    "title": "同产品同 SN 跨托盘重复必须拒绝",
+    "payload": "test_data/payloads/hvr05_12.json",
+    "curl": "test_data/curl/hvr05_12.sh",
+    "auth_mode": "valid"
+  }
+]
